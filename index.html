@@ -1,0 +1,1421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>img{max-width:100%}body{margin:0}</style>
+<title>Stitch Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800;900&family=Bebas+Neue&family=Bricolage+Grotesque:wght@500;600;800&family=DM+Serif+Display&family=Familjen+Grotesk:wght@600;700&family=Figtree:wght@400;500;600;800;900&family=IBM+Plex+Mono:wght@500&family=Montserrat:wght@500;600;800;900&family=Poppins:wght@500;600;700;900&display=swap">
+<style>
+/* Layout: a guided step rail on the left (one panel at a time), a 9:16 monitor with a layer timeline on the right; stacks on phones. Tally red is the single accent; lanes get their own quiet hues. */
+:root{
+  --bg:#eef0f4; --panel:#ffffff; --fg:#151821; --muted:#5a6172; --line:#d9dde5; --field:#f6f7fa;
+  --accent:#d6393b; --accent-ink:#ffffff; --ok:#23845a; --warn:#a86a00;
+  --laneA:#7a5af8; --laneB:#0f8a8a; --cap:#d98e04;
+  --f-display:"Familjen Grotesk",system-ui,sans-serif;
+  --f-body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1015; --panel:#161920; --fg:#eceef3; --muted:#949bab; --line:#2a2f39; --field:#1d2129;
+  --accent:#ff5a54; --accent-ink:#1a0606; --ok:#4cc38a; --warn:#e8a93a;
+  --laneA:#9d85ff; --laneB:#2fb8b8; --cap:#f0b232; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1015; --panel:#161920; --fg:#eceef3; --muted:#949bab; --line:#2a2f39; --field:#1d2129;
+  --accent:#ff5a54; --accent-ink:#1a0606; --ok:#4cc38a; --warn:#e8a93a;
+  --laneA:#9d85ff; --laneB:#2fb8b8; --cap:#f0b232; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;letter-spacing:-.01em}
+.tally{display:inline-flex;align-items:center;gap:7px;font:500 11px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tally i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.tally.on i{background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 25%,transparent)}
+.sub{color:var(--muted);margin:0;max-width:66ch}
+.grid{display:grid;grid-template-columns:minmax(0,430px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.rail{display:flex;flex-direction:column;gap:14px;min-width:0}
+section.step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.step h2{font-family:var(--f-display);font-weight:600;font-size:17px;margin:0;display:flex;gap:10px;align-items:baseline;text-wrap:balance}
+.step h2 b{font:500 11px var(--f-mono);color:var(--accent);letter-spacing:.08em;white-space:nowrap}
+.lbl{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--field);color:var(--fg);font:600 14px var(--f-body);padding:9px 14px;border-radius:8px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.sm{padding:4px 9px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.seg label:focus-within,.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.file{position:relative;overflow:hidden}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+textarea{width:100%;min-height:190px;resize:vertical;background:var(--field);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:16px/1.45 var(--f-body)}
+input[type=text],input[type=number],select{background:var(--field);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font:15px var(--f-body);min-width:0}
+input[type=number]{font-family:var(--f-mono);width:100%}
+select{width:100%;font-weight:600;font-size:14px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=color]{width:44px;height:36px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px;cursor:pointer;flex:none}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--field)}
+.seg label{flex:1;text-align:center;cursor:pointer;font-weight:600;font-size:13px;padding:8px 4px;color:var(--muted)}
+.seg label+label{border-left:1px solid var(--line)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--fg);color:var(--bg)}
+.slider{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center}
+.slider output{font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.slider input{grid-column:1/-1}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.note{font-size:13px;color:var(--muted);margin:0}
+.note.ok{color:var(--ok)} .note.warn{color:var(--warn)}
+.lead{font-size:14px;margin:0}
+code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.meta{font:500 12px var(--f-mono);color:var(--muted);word-break:break-all}
+.bar{height:6px;background:var(--field);border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
+/* format cards */
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.cards{grid-template-columns:1fr}}
+.card{appearance:none;text-align:left;border:1px solid var(--line);background:var(--field);color:var(--fg);border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;font:inherit}
+.card:hover{border-color:var(--muted)}
+.card.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.card b{font-family:var(--f-display);font-size:16px}
+.card span{font-size:13px;color:var(--muted)}
+.card svg{width:34px;height:52px}
+/* wizard header */
+.wiz{display:flex;flex-direction:column;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.wizTop{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.wizTop b{font-family:var(--f-display);font-size:16px;display:block}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.steps button{appearance:none;border:1px solid var(--line);background:var(--field);color:var(--muted);font:600 12px var(--f-body);padding:5px 9px;border-radius:999px;cursor:pointer}
+.steps button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.steps button.done{color:var(--fg)}
+.nav{display:flex;justify-content:space-between;align-items:center;gap:10px}
+/* lists */
+.clips,.caps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.clip{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--field)}
+.clip .n{font:500 12px var(--f-mono);color:var(--accent)}
+.clip .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clip .st{grid-column:2/-1;font-size:12.5px;color:var(--muted)}
+.clip .st.ok{color:var(--ok)} .clip .st.warn{color:var(--warn)}
+.clip .ctl{display:flex;gap:4px}
+.imgs{display:flex;flex-wrap:wrap;gap:8px}
+.imgs:empty{display:none}
+.chip{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--field);border-radius:8px;padding:4px;max-width:100%;min-width:0}
+.chip img{width:36px;height:36px;object-fit:cover;border-radius:5px;flex:none}
+.chip span{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.cap{border:1px solid var(--line);border-left:4px solid var(--cap);border-radius:8px;padding:8px;background:var(--field);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;align-items:end}
+.cap input[type=text]{grid-column:1/-1;width:100%;font-weight:600}
+.cap label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);font-weight:600;min-width:0}
+.cap select{padding:6px 4px;font-size:13px}
+.cap input[type=number]{padding:6px;font-size:13px}
+.cap .acts{display:flex;gap:4px;justify-content:flex-end;align-self:end}
+.empty{font-size:13px;color:var(--muted);margin:0}
+.cap.br{border-left-color:var(--laneA)}
+.brHead{grid-column:1/-1;display:flex;align-items:center;gap:10px;min-width:0}
+.brHead img{width:44px;height:44px;object-fit:cover;border-radius:6px;flex:none;background:var(--line)}
+.brHead span{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* monitor */
+.monitor{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;gap:12px;align-items:center;min-width:0}
+.screen{background:#000;border-radius:18px;padding:8px;box-shadow:0 1px 0 var(--line),0 18px 40px -20px rgba(0,0,0,.45)}
+#preview{display:block;height:min(68vh,720px);aspect-ratio:9/16;max-width:100%;width:auto;border-radius:12px;background:#000}
+@media (max-width:900px){#preview{height:auto;width:min(100%,380px)}.monitor{position:static}}
+.transport{display:flex;gap:10px;align-items:center;width:min(100%,480px)}
+.transport input{flex:1}
+.time{font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tl{width:min(100%,480px);display:flex;flex-direction:column;gap:4px}
+#timeline{width:100%;height:84px;display:block;cursor:pointer;border-radius:8px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.swatch{width:10px;height:10px;border-radius:3px;display:inline-block}
+#result{width:min(100%,260px);border-radius:10px;background:#000}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <h1>Stitch Studio</h1>
+    <span class="tally" id="tally"><i></i><span id="tallyTxt">Standby</span></span>
+    <p class="sub">Pick a format and it walks you through each step. Everything exports as a 1080×1920 video with sound, keeping text inside the Reels/TikTok/Shorts safe zone.</p>
+  </header>
+
+  <div class="grid">
+    <div class="rail">
+      <div class="wiz" id="wiz" hidden>
+        <div class="wizTop"><div><span class="lbl">Format</span><b id="fmtName"></b></div><button class="btn sm" id="changeFmt">Change format</button></div>
+        <ol class="steps" id="steps"></ol>
+      </div>
+
+      <!-- FORMAT -->
+      <section class="step" data-panel="format">
+        <h2>What are you making?</h2>
+        <div class="cards" id="cards">
+          <button class="card" data-fmt="prompter">
+            <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="12" width="20" height="3" rx="1.5" fill="currentColor" opacity=".35"/><rect x="7" y="19" width="20" height="3" rx="1.5" fill="currentColor" opacity=".6"/><rect x="7" y="26" width="16" height="3" rx="1.5" fill="currentColor"/><path d="M17 44 V34 M13 38 l4-4 4 4" stroke="var(--accent)" stroke-width="2" fill="none"/></svg>
+            <b>Teleprompter</b><span>Words scroll up the screen in time with your up-swipes.</span></button>
+          <button class="card" data-fmt="scenes">
+            <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="20" width="20" height="3" rx="1.5" fill="currentColor"/><path d="M10 38 h14 M14 34 l-4 4 4 4" stroke="var(--accent)" stroke-width="2" fill="none"/></svg>
+            <b>Scene swipes</b><span>Swipe or tilt the camera to move to the next clip and its words.</span></button>
+          <button class="card" data-fmt="react">
+            <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="6" width="12" height="20" rx="2" fill="var(--accent)" opacity=".8"/><circle cx="20" cy="36" r="5" fill="currentColor" opacity=".6"/></svg>
+            <b>React &amp; respond</b><span>A video or photo (a claim, your book, your game), then you responding.</span></button>
+          <button class="card" data-fmt="green">
+            <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="9" width="22" height="3" rx="1.5" fill="currentColor" opacity=".35"/><rect x="6" y="15" width="22" height="3" rx="1.5" fill="currentColor" opacity=".35"/><circle cx="17" cy="30" r="5" fill="var(--accent)"/><path d="M8 51 q9-16 18 0" fill="var(--accent)"/></svg>
+            <b>Green screen</b><span>You in front of a new background: a photo, a video, or words behind you.</span></button>
+        </div>
+        <p class="note">You can switch formats any time. Your words and settings for each format are kept.</p>
+      </section>
+
+      <!-- CLIPS (prompter, scenes) -->
+      <section class="step" data-panel="clips" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead" data-for="prompter">Upload the clip of you swiping up, or several clips if you want more than one scene. End a clip with a side swipe to slide into the next one.</p>
+        <p class="lead" data-for="scenes">Upload one clip per scene, in order. End each clip with a swipe or camera move, sideways or a tilt up or down. That move carries you into the next clip, so you don't need to trim.</p>
+        <div class="row"><span class="btn file">Add clips<input type="file" id="vidIn" accept="video/*" multiple></span><span class="note" id="clipCount"></span></div>
+        <ul class="clips" id="clips"></ul>
+        <div class="slider"><label class="lbl" for="minMove">Ignore small movements</label><output id="minMoveOut"></output><input type="range" id="minMove" min="0" max="3" step="0.1"></div>
+        <div class="slider"><label class="lbl" for="clipVol">Clip volume</label><output id="clipVolOut"></output><input type="range" id="clipVol" min="0" max="1.5" step="0.05"></div>
+        <p class="note">Set the volume to 0% if you'll add music later.</p>
+      </section>
+
+      <!-- WORDS (prompter, scenes, green) -->
+      <section class="step" data-panel="words" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead" data-for="prompter">Type what scrolls up the screen. If you have more than one clip, put <code>---</code> on its own line to start the next clip's words.</p>
+        <p class="lead" data-for="scenes">Write one section per clip, with <code>---</code> on its own line between sections.</p>
+        <p class="lead" data-for="green">These words sit behind you, either still or slowly scrolling up.</p>
+        <div class="field" data-for="green"><span class="lbl">Words behind you</span>
+          <div class="seg" role="radiogroup" aria-label="Words behind you">
+            <label><input type="radio" name="behind" value="none">None</label>
+            <label><input type="radio" name="behind" value="still">Still</label>
+            <label><input type="radio" name="behind" value="scroll">Scrolling</label>
+          </div></div>
+        <div class="field" data-for="green" id="gposWrap"><span class="lbl">Where</span>
+          <div class="seg" role="radiogroup" aria-label="Where the still words sit">
+            <label><input type="radio" name="gpos" value="top">Top</label>
+            <label><input type="radio" name="gpos" value="middle">Middle</label>
+            <label><input type="radio" name="gpos" value="bottom">Bottom</label>
+          </div></div>
+        <textarea id="words" aria-label="Your words"></textarea>
+        <div class="row">
+          <button class="btn sm" id="emBtn" title="Wrap the selected words in *stars*">Emphasize selection</button>
+          <span class="btn sm file">Add image<input type="file" id="imgIn" accept="image/*" multiple></span>
+          <span class="btn sm file">Load .txt<input type="file" id="txtIn" accept=".txt,text/plain"></span>
+        </div>
+        <div class="imgs" id="imgList"></div>
+        <p class="note">Wrap words in <code>*stars*</code> to emphasize them. Add image puts a picture where your cursor is, and it moves with the words.</p>
+        <p class="note warn" id="imgNote" hidden></p>
+        <p class="note" id="secNote" data-for="prompter scenes"></p>
+      </section>
+
+      <!-- LOOK -->
+      <section class="step" data-panel="look" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Choose how your words look. The preview updates as you go.</p>
+        <div class="two">
+          <div class="field"><label class="lbl" for="font">Font</label>
+            <select id="font">
+              <option value="figtree">Figtree</option><option value="poppins">Poppins</option>
+              <option value="montserrat">Montserrat</option><option value="archivo">Archivo</option>
+              <option value="bricolage">Bricolage Grotesque</option><option value="dmserif">DM Serif Display</option>
+              <option value="bebas">Bebas Neue</option>
+            </select></div>
+          <div class="field"><label class="lbl" for="weight">Regular words</label>
+            <select id="weight"><option value="reg">Medium</option><option value="semi">Semibold</option><option value="bold">Bold</option></select></div>
+        </div>
+        <div class="field"><span class="lbl">Emphasized words</span>
+          <div class="row" style="flex-wrap:nowrap">
+            <div class="seg" role="radiogroup" aria-label="Emphasis style" style="flex:1">
+              <label><input type="radio" name="em" value="bold">Bolder</label>
+              <label><input type="radio" name="em" value="color">Color</label>
+              <label><input type="radio" name="em" value="marker">Marker</label>
+              <label><input type="radio" name="em" value="under">Underline</label>
+            </div>
+            <input type="color" id="emCol" aria-label="Emphasis color">
+          </div>
+          <p class="note warn" id="fontNote" hidden>This font has one weight, so use Color, Marker or Underline for emphasis.</p>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="Text style">
+          <label><input type="radio" name="style" value="shadow">White + shadow</label>
+          <label><input type="radio" name="style" value="pill">Highlight boxes</label>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="Alignment">
+          <label><input type="radio" name="align" value="center">Centered</label>
+          <label><input type="radio" name="align" value="left">Left</label>
+        </div>
+        <div class="slider"><label class="lbl" for="size">Text size</label><output id="sizeOut"></output><input type="range" id="size" min="44" max="130" step="2"></div>
+        <div class="slider"><label class="lbl" for="leading">Line spacing</label><output id="leadingOut"></output><input type="range" id="leading" min="1.1" max="1.9" step="0.05"></div>
+        <div class="slider"><label class="lbl" for="imgScale">Image size</label><output id="imgScaleOut"></output><input type="range" id="imgScale" min="0.3" max="1" step="0.05"></div>
+      </section>
+
+      <!-- SYNC (prompter) -->
+      <section class="step" data-panel="sync" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Decide how the words follow you. Play the preview to check the timing.</p>
+        <div class="seg" role="radiogroup" aria-label="Sync mode">
+          <label><input type="radio" name="sync" value="motion">Follow my hand</label>
+          <label><input type="radio" name="sync" value="steady">Steady speed</label>
+        </div>
+        <div id="motionOpts" class="field" style="gap:12px">
+          <div class="seg" role="radiogroup" aria-label="Distance">
+            <label><input type="radio" name="fit" value="fit">Fit words to clip</label>
+            <label><input type="radio" name="fit" value="raw">1:1 with hand</label>
+          </div>
+          <div class="slider"><label class="lbl" for="travel">Scroll amount</label><output id="travelOut"></output><input type="range" id="travel" min="0.5" max="2" step="0.05"></div>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="Ending">
+          <label><input type="radio" name="end" value="exit">Scroll off top</label>
+          <label><input type="radio" name="end" value="hold">Stop mid-screen</label>
+        </div>
+      </section>
+
+      <!-- PLACE (scenes) -->
+      <section class="step" data-panel="place" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Choose where each scene's words sit and how the next scene's words arrive.</p>
+        <div class="field"><span class="lbl">Where the words sit</span>
+          <div class="seg" role="radiogroup" aria-label="Word position">
+            <label><input type="radio" name="pos" value="top">Top</label>
+            <label><input type="radio" name="pos" value="middle">Middle</label>
+            <label><input type="radio" name="pos" value="bottom">Bottom</label>
+          </div></div>
+        <div class="field"><span class="lbl">Next scene's words</span>
+          <div class="seg" role="radiogroup" aria-label="Next scene's words">
+            <label><input type="radio" name="sceneIn" value="slide">Slide in with the scene</label>
+            <label><input type="radio" name="sceneIn" value="type">Type out as you swipe</label>
+          </div>
+          <p class="note">With "Type out as you swipe," the letters appear as fast as you move. Swipe slowly and they type slowly.</p></div>
+      </section>
+
+      <!-- REACT A -->
+      <section class="step" data-panel="reactA" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Upload what you're reacting to. That can be a video (a claim, a recording of your game) or a photo (your book cover, a screenshot).</p>
+        <div class="row"><span class="btn file">Upload video or photo<input type="file" id="inA" accept="video/*,image/*"></span><span class="meta" id="metaA">Sample loaded</span></div>
+        <div class="two">
+          <div class="field" id="sAWrap"><label class="lbl" for="sA">Start at (sec)</label><input type="number" id="sA" min="0" step="0.1"></div>
+          <div class="field"><label class="lbl" for="eA" id="eALbl">End at (sec)</label><input type="number" id="eA" min="0" step="0.1"></div>
+        </div>
+        <div class="slider" id="volAWrap"><label class="lbl" for="volA">Volume</label><output id="volAOut"></output><input type="range" id="volA" min="0" max="1.5" step="0.05"></div>
+        <div class="field"><label class="lbl" for="credit">Label on it (optional)</label><input type="text" id="credit" placeholder="@creator, or My game: HealthQuest"></div>
+        <p class="note">If it's someone else's video, use one you have permission to repost, or use the platform's Stitch or Remix.</p>
+      </section>
+
+      <!-- REACT B -->
+      <section class="step" data-panel="reactB" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Upload the clip of you responding. Trim off the start or end if you need to.</p>
+        <div class="row"><span class="btn file">Upload video<input type="file" id="inB" accept="video/*"></span><span class="meta" id="metaB">Sample loaded</span></div>
+        <div class="two">
+          <div class="field"><label class="lbl" for="sB">Start at (sec)</label><input type="number" id="sB" min="0" step="0.1"></div>
+          <div class="field"><label class="lbl" for="eB">End at (sec)</label><input type="number" id="eB" min="0" step="0.1"></div>
+        </div>
+        <div class="slider"><label class="lbl" for="volB">Volume</label><output id="volBOut"></output><input type="range" id="volB" min="0" max="1.5" step="0.05"></div>
+      </section>
+
+      <!-- LAYOUT (react) -->
+      <section class="step" data-panel="layout" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <div class="seg" role="radiogroup" aria-label="Layout">
+          <label><input type="radio" name="layout" value="stitch">Stitch</label>
+          <label><input type="radio" name="layout" value="pip">Picture-in-picture</label>
+          <label><input type="radio" name="layout" value="split">Split screen</label>
+        </div>
+        <p class="note" id="layoutNote"></p>
+        <div class="field" id="timingWrap"><span class="lbl">Timing</span>
+          <div class="seg" role="radiogroup" aria-label="Timing">
+            <label><input type="radio" name="timing" value="seq">Theirs first, then me</label>
+            <label><input type="radio" name="timing" value="sim">Both at once</label>
+          </div></div>
+        <div class="field" id="cornerWrap"><span class="lbl">Corner box</span>
+          <div class="seg" role="radiogroup" aria-label="Corner">
+            <label><input type="radio" name="corner" value="tl">Top left</label>
+            <label><input type="radio" name="corner" value="tr">Top right</label>
+          </div></div>
+      </section>
+
+      <!-- FG (green) -->
+      <section class="step" data-panel="fg" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Upload your video with a solid green behind you. If you're using Canva, remove the background there, put a bright green rectangle behind you, then download it as an MP4.</p>
+        <div class="row"><span class="btn file">Upload video<input type="file" id="fgIn" accept="video/*"></span><span class="meta" id="fgMeta">Sample person loaded</span></div>
+        <div class="seg" role="radiogroup" aria-label="Background removal">
+          <label><input type="radio" name="keyMode" value="color">Remove the green</label>
+          <label><input type="radio" name="keyMode" value="alpha">Already transparent</label>
+        </div>
+        <div class="field" id="keyOpts" style="gap:10px">
+          <div class="row"><span class="lbl">Color to remove</span><input type="color" id="keyCol" aria-label="Color to remove"><button class="btn sm" id="autoKey">Detect from video</button></div>
+          <div class="slider"><label class="lbl" for="keySim">Removal strength</label><output id="keySimOut"></output><input type="range" id="keySim" min="0.05" max="0.7" step="0.01"></div>
+          <div class="slider"><label class="lbl" for="keySmooth">Edge softness</label><output id="keySmoothOut"></output><input type="range" id="keySmooth" min="0.01" max="0.3" step="0.01"></div>
+          <div class="slider"><label class="lbl" for="keySpill">Green fringe cleanup</label><output id="keySpillOut"></output><input type="range" id="keySpill" min="0.01" max="0.5" step="0.01"></div>
+          <p class="note">If green shows around your edges, raise the strength. If parts of you disappear, lower it.</p>
+        </div>
+        <div class="slider"><label class="lbl" for="fgScale">Your size</label><output id="fgScaleOut"></output><input type="range" id="fgScale" min="0.4" max="1.5" step="0.01"></div>
+        <div class="two">
+          <div class="slider"><label class="lbl" for="fgX">Left / right</label><output id="fgXOut"></output><input type="range" id="fgX" min="-0.5" max="0.5" step="0.01"></div>
+          <div class="slider"><label class="lbl" for="fgY">Up / down</label><output id="fgYOut"></output><input type="range" id="fgY" min="-0.5" max="0.5" step="0.01"></div>
+        </div>
+        <div class="two">
+          <div class="field"><label class="lbl" for="fgS">Start at (sec)</label><input type="number" id="fgS" min="0" step="0.1"></div>
+          <div class="field"><label class="lbl" for="fgE">End at (sec)</label><input type="number" id="fgE" min="0" step="0.1"></div>
+        </div>
+        <div class="slider"><label class="lbl" for="fgVol">Your volume</label><output id="fgVolOut"></output><input type="range" id="fgVol" min="0" max="1.5" step="0.05"></div>
+      </section>
+
+      <!-- BG (green) -->
+      <section class="step" data-panel="bg" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Choose what goes behind you. Words come in the next step and sit on top of this.</p>
+        <div class="seg" role="radiogroup" aria-label="Background type">
+          <label><input type="radio" name="bgType" value="color">Color</label>
+          <label><input type="radio" name="bgType" value="image">Photo</label>
+          <label><input type="radio" name="bgType" value="video">Video</label>
+        </div>
+        <div class="row" id="bgColorOpts"><span class="lbl">Top</span><input type="color" id="bgCol1" aria-label="Top color"><span class="lbl">Bottom</span><input type="color" id="bgCol2" aria-label="Bottom color"></div>
+        <div class="row" id="bgImgOpts"><span class="btn file">Upload photo<input type="file" id="bgImgIn" accept="image/*"></span><span class="meta" id="bgImgMeta">No photo yet</span></div>
+        <div class="field" id="bgVidOpts">
+          <div class="row"><span class="btn file">Upload video<input type="file" id="bgVidIn" accept="video/*"></span><span class="meta" id="bgVidMeta">No video yet</span></div>
+          <div class="slider"><label class="lbl" for="bgVol">Background volume</label><output id="bgVolOut"></output><input type="range" id="bgVol" min="0" max="1.5" step="0.05"></div>
+          <p class="note">The background video loops if it's shorter than your clip.</p>
+        </div>
+        <div class="slider"><label class="lbl" for="bgDim">Darken background</label><output id="bgDimOut"></output><input type="range" id="bgDim" min="0" max="0.8" step="0.05"></div>
+      </section>
+
+      <!-- B-ROLL -->
+      <section class="step" data-panel="broll" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Scrub to where you want a photo to pop up, then add it. Add several at once and they line up one after another. Set how long each stays, how it looks and how it comes in.</p>
+        <div class="row"><span class="btn file">Add b-roll photos<input type="file" id="brIn" accept="image/*" multiple></span><span class="note">This step is optional. Skip it if you don't need it.</span></div>
+        <ul class="caps" id="brList"></ul>
+      </section>
+
+      <!-- CAPTIONS -->
+      <section class="step" data-panel="captions" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Scrub to where you want a caption, then tap a preset. You can edit the text, timing, position, style and animation below.</p>
+        <div class="presets" id="presets"></div>
+        <ul class="caps" id="caps"></ul>
+      </section>
+
+      <!-- EXPORT -->
+      <section class="step" data-panel="export" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Play it through once to check it, then export. Keep this tab open and in front while it records. It takes about as long as the video.</p>
+        <button class="btn primary" id="exportBtn">Export 9:16 video</button>
+        <div class="bar" id="exBar" hidden><i></i></div>
+        <p class="note" id="exNote"></p>
+        <video id="result" hidden controls playsinline></video>
+      </section>
+
+      <div class="nav" id="nav" hidden>
+        <button class="btn" id="backBtn">Back</button>
+        <span class="meta" id="stepOf"></span>
+        <button class="btn primary" id="nextBtn">Next</button>
+      </div>
+    </div>
+
+    <div class="monitor">
+      <div class="screen"><canvas id="preview" width="1080" height="1920" aria-label="9:16 preview"></canvas></div>
+      <div class="transport">
+        <button class="btn" id="playBtn">Play</button>
+        <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub">
+        <span class="time" id="time">0:00.0</span>
+      </div>
+      <label class="note" style="width:min(100%,480px)"><input type="checkbox" id="guides" checked> Show safe-zone guides (preview only)</label>
+      <div class="tl">
+        <canvas id="timeline" width="960" height="168" aria-label="Timeline: tap to jump"></canvas>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+/* =============== constants + state =============== */
+const W = 1080, H = 1920;
+const SAFE = {top:250, bottom:1520, left:60, right:940};
+const FADE = 150, PADX = 30, AW = 90, AH = 160, R = 26;
+const STORE = "short-studio-v1";
+const $ = id => document.getElementById(id);
+const $$ = sel => [...document.querySelectorAll(sel)];
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const ease = q => q < .5 ? 2*q*q : 1 - Math.pow(-2*q+2, 2)/2;
+const IMG_RE = /^\[image:\s*(.+?)\s*\]$/i;
+
+const FORMATS = {
+  prompter:{name:"Teleprompter", steps:[["clips","Upload your swipe clip"],["words","Add your words"],["look","Choose the look"],["sync","Set the timing"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
+  scenes:  {name:"Scene swipes", steps:[["clips","Upload your scene clips"],["words","Words for each scene"],["look","Choose the look"],["place","Placement and entrance"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
+  react:   {name:"React & respond", steps:[["reactA","What you're reacting to"],["reactB","Your response"],["layout","Pick the layout"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
+  green:   {name:"Green screen", steps:[["fg","Upload your green-screen video"],["bg","Choose your background"],["words","Words behind you"],["look","Choose the look"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
+};
+const SAMPLES = {
+  prompter:"This is a *sample* script.\nPaste your own words here.\n\nEach line rides up\nwhen your hand swipes up.\n\nPause your hand\nand the words *pause* too.",
+  scenes:"Scene one's words sit *right here*.\n---\nSwipe, and the next scene\n*types itself out*.\n---\nTilt the camera\nand the scene *follows it*.",
+  green:"*Myth:*\nYou have to drink\n8 glasses of water a day.\n\nHere's what the\n*research* actually says.",
+};
+const S = {
+  format:null, step:0,
+  words:{...SAMPLES},
+  sync:"motion", fit:"fit", travel:1, minMove:0.6, end:"exit", pos:"middle", sceneIn:"type", clipVol:1,
+  font:"figtree", weight:"semi", em:"color", emCol:"#ffd54a", style:"shadow", align:"center", size:72, leading:1.35, imgScale:0.8,
+  layout:"pip", timing:"seq", corner:"tl", volA:1, volB:1, credit:"",
+  keyMode:"color", keyCol:"#00ff00", keySim:0.4, keySmooth:0.08, keySpill:0.1, fgScale:1, fgX:0, fgY:0, fgVol:1,
+  bgType:"color", bgCol1:"#1f3b5c", bgCol2:"#3a1f4f", bgVol:0.3, bgDim:0, behind:"scroll", gpos:"top",
+  caps:{
+    prompter:[], scenes:[],
+    react:[{text:"True or False?", t0:0.3, t1:3.7, pos:"top", style:"banner", anim:"words"},
+           {text:"Here's what the experts say", t0:4.6, t1:8.0, pos:"bottom", style:"banner", anim:"type"},
+           {text:"FALSE", t0:8.3, t1:9.8, pos:"middle", style:"stamp", anim:"pop"}],
+    green:[{text:"MYTH", t0:0.6, t1:2.4, pos:"bottom", style:"stamp", anim:"pop"}]
+  },
+  broll:{prompter:[], scenes:[], react:[], green:[]},
+  guides:true
+};
+try { const sv = JSON.parse(localStorage.getItem(STORE) || "null");
+  if (sv) for (const k of Object.keys(S)) if (k in sv){
+    if (k === "words" || k === "caps" || k === "broll") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
+delete S.caps["null"]; delete S.broll["null"];
+function persist(){ try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){} }
+const Rt = {T:0, playing:false, exporting:false, analyzing:0, dirty:true};
+const caps = () => !S.format ? [] : (S.caps[S.format] || (S.caps[S.format] = []));
+const brolls = () => !S.format ? [] : (S.broll[S.format] || (S.broll[S.format] = []));
+
+/* =============== media + audio =============== */
+let actx = null, recDest = null;
+const MEDIA = new Set();
+function regVideo(v, volFn){ const e = {v, vol:volFn}; v._e = e; MEDIA.add(e); if (actx) attachE(e); return e; }
+function unregVideo(v){ const e = v && v._e; if (!e) return; v.pause(); try { e.node && e.node.disconnect(); e.gain && e.gain.disconnect(); } catch(_){} MEDIA.delete(e); try { URL.revokeObjectURL(v.src); } catch(_){} }
+function attachE(e){ if (e.gain || !actx) return; try { e.node = actx.createMediaElementSource(e.v); e.gain = actx.createGain();
+  e.node.connect(e.gain); e.gain.connect(actx.destination); e.gain.connect(recDest); e.v.muted = false; e.gain.gain.value = e.v._quiet ? 0 : e.vol(); } catch(_){} }
+function ensureAudio(){
+  if (!actx){ try { actx = new (window.AudioContext || window.webkitAudioContext)(); recDest = actx.createMediaStreamDestination(); } catch(_){ actx = null; return; } }
+  actx.resume && actx.resume(); MEDIA.forEach(attachE); updateVols();
+}
+function updateVols(){ MEDIA.forEach(e => { if (e.gain) e.gain.gain.value = e.v._quiet ? 0 : e.vol(); }); }
+function pauseAll(){ MEDIA.forEach(e => e.v.pause()); }
+async function openVideo(file){
+  const v = document.createElement("video"); v.playsInline = true; v.preload = "auto"; v.muted = true; v.src = URL.createObjectURL(file);
+  await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error("load")); });
+  v.addEventListener("seeked", () => Rt.dirty = true);
+  return v;
+}
+function seekV(v, t){ return new Promise(res => {
+  if (Math.abs(v.currentTime - t) < 1e-3 && v.readyState >= 2) return res();
+  const on = () => { v.removeEventListener("seeked", on); res(); }; v.addEventListener("seeked", on); v.currentTime = t; }); }
+function playSync(v, want, go, tol){
+  if (go){ if (v.paused){ if (Math.abs(v.currentTime - want) > 0.05) v.currentTime = want; v.play().catch(() => {}); }
+    else if (Math.abs(v.currentTime - want) > (tol || 0.3)) v.currentTime = want; }
+  else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - want) > 0.04) v.currentTime = want; }
+}
+function coverInto(ctx, src, sw0, sh0, x, y, w, h){
+  const ar = w/h; let sw, sh; if (sw0/sh0 > ar){ sh = sh0; sw = sh0*ar; } else { sw = sw0; sh = sw0/ar; }
+  ctx.drawImage(src, (sw0-sw)/2, (sh0-sh)/2, sw, sh, x, y, w, h);
+}
+const coverVid = (ctx, v, x, y, w, h) => coverInto(ctx, v, v.videoWidth, v.videoHeight, x, y, w, h);
+function rr(c, x, y, w, h, r){ r = Math.max(0, Math.min(r, w/2, h/2)); c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+
+/* =============== words engine =============== */
+const FONTS = {
+  figtree:{fam:"Figtree", w:{reg:500,semi:600,bold:800}, em:900}, poppins:{fam:"Poppins", w:{reg:500,semi:600,bold:700}, em:900},
+  montserrat:{fam:"Montserrat", w:{reg:500,semi:600,bold:800}, em:900}, archivo:{fam:"Archivo", w:{reg:500,semi:600,bold:800}, em:900},
+  bricolage:{fam:"Bricolage Grotesque", w:{reg:500,semi:600,bold:800}, em:800},
+  dmserif:{fam:"DM Serif Display", w:{reg:400,semi:400,bold:400}, em:400, single:true}, bebas:{fam:"Bebas Neue", w:{reg:400,semi:400,bold:400}, em:400, single:true},
+};
+const IMAGES = new Map(); let imgVer = 0;
+function font(em){ const f = FONTS[S.font] || FONTS.figtree; const w = em && (S.em === "bold" || S.em === "color") ? f.em : f.w[S.weight]; return `${w} ${S.size}px "${f.fam}", system-ui, sans-serif`; }
+function parseLine(line){
+  const parts = line.split(/\*+/), words = []; let cur = null;
+  parts.forEach((p, k) => { const em = k % 2 === 1;
+    for (const b of p.split(/(\s+)/)){ if (!b) continue; if (/^\s+$/.test(b)){ if (cur){ words.push(cur); cur = null; } continue; }
+      if (!cur) cur = []; cur.push({text:b, em}); } });
+  if (cur) words.push(cur); return words;
+}
+const mctx = document.createElement("canvas").getContext("2d");
+function pw(p){ mctx.font = font(p.em); return mctx.measureText(p.text).width + (p.em && S.em === "marker" ? 16 : 0); }
+const layoutCache = new Map(); let layoutKey = "";
+function sectionsOf(text){ return text.replace(/\r/g,"").split(/^\s*-{3,}\s*$/m).map(x => x.replace(/^\n+|\n+$/g,"")); }
+function layoutFor(text){
+  const key = [S.size,S.leading,S.style,S.font,S.weight,S.em,S.imgScale,imgVer].join("|");
+  if (key !== layoutKey){ layoutCache.clear(); layoutKey = key; }
+  if (layoutCache.has(text)) return layoutCache.get(text);
+  const maxW = SAFE.right - SAFE.left - PADX*2 - (S.style === "pill" ? 48 : 0), fullW = SAFE.right - SAFE.left - PADX*2;
+  mctx.font = font(false); const sp = mctx.measureText(" ").width;
+  const lineH = S.size*S.leading, lines = []; let y = 0, chars = 0;
+  for (const para of text.split("\n")){
+    const im = para.trim().match(IMG_RE);
+    if (im){ const name = im[1], img = IMAGES.get(name.toLowerCase()); let w = fullW*S.imgScale, h;
+      if (img){ const r = img.naturalHeight/img.naturalWidth; h = w*r; const cap = (SAFE.bottom-SAFE.top)*0.6*Math.min(1.15, S.imgScale/0.8); if (h > cap){ h = cap; w = h/r; } }
+      else h = Math.round(w*0.4);
+      if (lines.length) y += lineH*0.3; lines.push({kind:"img", img, name, y, w, h, c0:chars}); y += h + lineH*0.45; chars += 1; continue; }
+    const words = parseLine(para.trim());
+    if (!words.length){ if (lines.length) y += lineH*0.55; continue; }
+    let cur = [], w = 0;
+    const push = () => { const n = cur.reduce((a, wd) => a + wd.reduce((b, p) => b + p.text.length, 0), 0) + Math.max(0, cur.length-1);
+      lines.push({words:cur, width:w, y, c0:chars}); chars += n + 1; y += lineH; };
+    for (const wd of words){ const ww = wd.reduce((a,p) => a + pw(p), 0);
+      if (cur.length && w + sp + ww > maxW){ push(); cur = []; w = 0; }
+      w += (cur.length ? sp : 0) + ww; cur.push(wd); }
+    if (cur.length) push();
+  }
+  const L = {lines, height: lines.length ? y : 0, lineH, sp, chars};
+  layoutCache.set(text, L); return L;
+}
+const startTop = L => SAFE.bottom - FADE - L.lineH;
+function staticTop(L, pos){ if (pos === "top") return SAFE.top + 30; if (pos === "bottom") return SAFE.bottom - 30 - L.height; return (SAFE.top + SAFE.bottom)/2 - L.height/2; }
+function travelDist(L, end){ const top0 = startTop(L), mid = (SAFE.top + SAFE.bottom)/2;
+  const target = end === "hold" ? mid + L.lineH/2 - L.height : SAFE.top - L.height - 20; return Math.max(0, top0 - target); }
+const textCanvas = document.createElement("canvas"); textCanvas.width = W; textCanvas.height = H;
+const tctx = textCanvas.getContext("2d");
+/* draw a laid-out block. opts: top, dx, dy, fade (teleprompter edge fade), reveal (0..1 typewriter, by characters) */
+function drawWords(ctx, L, opts){
+  if (!L.lines.length) return;
+  const reveal = opts.reveal == null ? 1 : opts.reveal, limit = reveal >= 1 ? Infinity : Math.floor(L.chars*reveal);
+  if (limit <= 0) return;
+  tctx.setTransform(1,0,0,1,0,0); tctx.globalCompositeOperation = "source-over"; tctx.clearRect(0,0,W,H);
+  tctx.textBaseline = "middle"; tctx.textAlign = "left";
+  const top = opts.top, cx = (SAFE.left + SAFE.right)/2, lx = SAFE.left + PADX + (S.style === "pill" ? 24 : 0), pill = S.style === "pill", sz = S.size;
+  for (const ln of L.lines){
+    if (ln.c0 >= limit) break;
+    if (ln.kind === "img"){
+      const yT = top + ln.y; if (yT > SAFE.bottom + 60 || yT + ln.h < SAFE.top - 60) continue;
+      const x = S.align === "center" ? cx - ln.w/2 : SAFE.left + PADX;
+      tctx.save(); tctx.shadowColor = "rgba(0,0,0,.45)"; tctx.shadowBlur = 28; tctx.shadowOffsetY = 8; tctx.fillStyle = "#000"; rr(tctx, x, yT, ln.w, ln.h, 24); tctx.fill(); tctx.restore();
+      tctx.save(); rr(tctx, x, yT, ln.w, ln.h, 24); tctx.clip();
+      if (ln.img) tctx.drawImage(ln.img, x, yT, ln.w, ln.h);
+      else { tctx.fillStyle = "#3a3f4b"; tctx.fillRect(x, yT, ln.w, ln.h); tctx.fillStyle = "#fff"; tctx.font = "600 34px Figtree, sans-serif"; tctx.textAlign = "center"; tctx.fillText(`Add image: ${ln.name}`, x + ln.w/2, yT + ln.h/2, ln.w - 40); tctx.textAlign = "left"; }
+      tctx.restore(); continue;
+    }
+    const yMid = top + ln.y + L.lineH/2;
+    if (yMid < SAFE.top - L.lineH || yMid > SAFE.bottom + L.lineH) continue;
+    let x = S.align === "center" ? cx - ln.width/2 : lx, left = limit - ln.c0;
+    if (pill){ tctx.shadowColor = "transparent"; tctx.fillStyle = "rgba(255,255,255,.95)"; rr(tctx, x-24, yMid - sz*0.6, ln.width+48, sz*1.2, 16); tctx.fill(); }
+    for (let wi = 0; wi < ln.words.length && left > 0; wi++){
+      const wd = ln.words[wi];
+      if (wi){ x += L.sp; left -= 1; if (left <= 0) break; }
+      for (const p of wd){
+        if (left <= 0) break;
+        const txt = left >= p.text.length ? p.text : p.text.slice(0, left); left -= p.text.length;
+        tctx.font = font(p.em); const fullW = tctx.measureText(p.text).width, w = tctx.measureText(txt).width;
+        let mode = p.em ? S.em : "none"; if (pill && mode === "color") mode = "marker";
+        const base = pill ? "#121212" : "#ffffff";
+        if (mode === "marker"){ tctx.shadowColor = "transparent"; tctx.fillStyle = S.emCol; rr(tctx, x, yMid - sz*0.56, w+16, sz*1.12, 10); tctx.fill();
+          tctx.fillStyle = "#121212"; tctx.fillText(txt, x+8, yMid + sz*0.03); x += fullW + 16; continue; }
+        if (!pill){ tctx.shadowColor = "rgba(0,0,0,.65)"; tctx.shadowBlur = 20; tctx.shadowOffsetY = 4; } else tctx.shadowColor = "transparent";
+        tctx.fillStyle = mode === "color" ? S.emCol : base; tctx.fillText(txt, x, yMid + (pill ? sz*0.03 : 0));
+        if (mode === "under"){ tctx.fillStyle = S.emCol; tctx.fillRect(x, yMid + sz*0.5, w, Math.max(4, sz*0.08)); }
+        x += fullW;
+      }
+    }
+  }
+  tctx.shadowColor = "transparent"; tctx.shadowBlur = 0; tctx.shadowOffsetY = 0;
+  const zh = SAFE.bottom - SAFE.top;
+  if (opts.fade){ tctx.globalCompositeOperation = "destination-in";
+    const g = tctx.createLinearGradient(0, SAFE.top, 0, SAFE.bottom);
+    g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(FADE/zh,"rgba(0,0,0,1)"); g.addColorStop(1-FADE/zh,"rgba(0,0,0,1)"); g.addColorStop(1,"rgba(0,0,0,0)");
+    tctx.fillStyle = g; tctx.fillRect(0, SAFE.top, W, zh); tctx.globalCompositeOperation = "source-over"; }
+  const m = opts.fade ? 0 : 40; tctx.clearRect(0,0,W,SAFE.top - m); tctx.clearRect(0,SAFE.bottom + m,W,H-SAFE.bottom-m);
+  ctx.drawImage(textCanvas, opts.dx || 0, opts.dy || 0);
+}
+
+/* =============== motion detection (swipes) =============== */
+function estShift(prev, cur, axis, mask){
+  let n = 0; for (let i=0;i<cur.length;i++) if (Math.abs(cur[i]-prev[i]) > 16) mask[n++] = i;
+  if (n < 25) return 0;
+  const errs = new Float64Array(2*R+1), step = axis === "y" ? AW : 1, lim = axis === "y" ? AH : AW;
+  for (let s=-R; s<=R; s++){ let e = 0, c = 0;
+    for (let k=0;k<n;k++){ const idx = mask[k], co = axis === "y" ? (idx/AW)|0 : idx % AW, c2 = co + s;
+      if (c2 < 0 || c2 >= lim) continue; e += Math.abs(cur[idx] - prev[idx + s*step]); c++; }
+    errs[s+R] = c > n*0.4 ? e/c : Infinity; }
+  let bi = R; for (let i=0;i<errs.length;i++) if (errs[i] < errs[bi]) bi = i;
+  if (!isFinite(errs[bi]) || errs[bi] > errs[R]*0.82) return 0;
+  let s = bi - R;
+  if (bi > 0 && bi < errs.length-1 && isFinite(errs[bi-1]) && isFinite(errs[bi+1])){ const a = errs[bi-1], b = errs[bi], c = errs[bi+1], d = a-2*b+c; if (d > 0) s += 0.5*(a-c)/d; }
+  return s;
+}
+function findTrans(t, v, h, xOnly){
+  const n = t.length; let segs = [], cur = null, gap = 0;
+  for (let i=0;i<n;i++){ const ah = Math.abs(h[i]), av = Math.abs(v[i]);
+    const act = xOnly ? (ah > 1.2 && ah > av*1.2) : Math.max(ah, av) > 1.2;
+    if (act){ if (!cur) cur = {a:i, b:i, sh:0, ah:0, sv:0, av:0}; cur.b = i; cur.sh += h[i]; cur.ah += ah; cur.sv += v[i]; cur.av += av; gap = 0; }
+    else if (cur){ if (++gap > 2){ segs.push(cur); cur = null; gap = 0; } } }
+  if (cur) segs.push(cur);
+  segs = segs.map(g => { const ax = (xOnly || g.ah/AW >= g.av/AH) ? "x" : "y";
+      const sum = ax === "x" ? g.sh : g.sv, abs = ax === "x" ? g.ah : g.av, dim = ax === "x" ? AW : AH;
+      return Object.assign(g, {ax, sum, abs, ok: abs >= dim*0.3 && Math.abs(sum) > 0.7*abs}); }).filter(g => g.ok);
+  const g = segs[segs.length-1]; if (!g) return null;
+  const arr = g.ax === "x" ? h : v, a = Math.max(0, g.a-1), st = [], sH = []; let acc = 0;
+  for (let i=a;i<=g.b;i++){ if (i > a) acc += Math.abs(arr[i]); st.push(t[i]); sH.push(acc); }
+  return {t0:t[a], t1:t[g.b], a, b:g.b, ax:g.ax, dx: g.ax === "x" ? (g.sum > 0 ? -1 : 1) : 0, dy: g.ax === "y" ? (g.sum > 0 ? -1 : 1) : 0, t:st, H:sH.map(x => x/(acc||1))};
+}
+function buildMotion(s){
+  const {t, v, h} = s.raw, n = t.length;
+  s.transX = findTrans(t, v, h, true); s.transAny = findTrans(t, v, h, false);
+  const sg = s.transX, U = new Array(n); let swipes = 0, quiet = 99;
+  for (let i=0;i<n;i++){ const inSide = sg && i >= sg.a && i <= sg.b;
+    const u = (!inSide && v[i] > S.minMove && v[i] > Math.abs(h[i])) ? v[i]/AH : 0;
+    U[i] = (i ? U[i-1] : 0) + u; if (u > 0){ if (quiet > 6) swipes++; quiet = 0; } else quiet++; }
+  s.motion = {t, U, swipes};
+}
+function interp(ts, vs, t){ const n = ts.length; if (!n) return 0; if (t <= ts[0]) return vs[0]; if (t >= ts[n-1]) return vs[n-1];
+  let lo = 0, hi = n-1; while (hi-lo > 1){ const m = (lo+hi)>>1; if (ts[m] <= t) lo = m; else hi = m; }
+  return vs[lo] + (vs[hi]-vs[lo])*((t-ts[lo])/((ts[hi]-ts[lo])||1)); }
+async function analyze(s){
+  Rt.analyzing++; setBusy(); s.status = "analyzing"; s.prog = 0; renderClips();
+  const v = s.video; v._quiet = true; updateVols();
+  const c = document.createElement("canvas"); c.width = AW; c.height = AH;
+  const cx = c.getContext("2d", {willReadFrequently:true}), mask = new Int32Array(AW*AH), t = [], vv = [], hh = []; let prev = null;
+  const step = tt => { coverVid(cx, v, 0, 0, AW, AH); const d = cx.getImageData(0,0,AW,AH).data, g = new Float32Array(AW*AH);
+    for (let i=0,j=0;i<g.length;i++,j+=4) g[i] = 0.299*d[j] + 0.587*d[j+1] + 0.114*d[j+2];
+    t.push(tt); vv.push(prev ? estShift(prev, g, "y", mask) : 0); hh.push(prev ? estShift(prev, g, "x", mask) : 0); prev = g;
+    const pc = Math.round(tt/s.duration*100); if (pc !== s.prog){ s.prog = pc; renderClips(); } };
+  try {
+    await seekV(v, 0);
+    if ("requestVideoFrameCallback" in v){
+      await new Promise(resolve => { let fin = false;
+        const done = () => { if (fin) return; fin = true; v.removeEventListener("ended", done); resolve(); };
+        const cb = (now, meta) => { if (fin) return; step(meta.mediaTime); if (!v.ended) v.requestVideoFrameCallback(cb); };
+        v.requestVideoFrameCallback(cb); v.addEventListener("ended", done); v.play().catch(done); });
+    } else { for (let tt=0; tt<s.duration; tt += 1/30){ await seekV(v, tt); step(tt); } }
+  } finally {
+    v.pause(); await seekV(v, 0); v._quiet = false; updateVols();
+    s.raw = {t, v:vv, h:hh}; buildMotion(s); s.status = "ready"; Rt.analyzing--; setBusy(); renderClips(); Rt.dirty = true;
+  }
+}
+
+/* =============== FORMAT: teleprompter + scene swipes =============== */
+const SW = {scenes:[], demo:true, active:-1};
+function swDemoFinger(s, t){
+  for (const u of s.ups){ const p = (t-u)/0.8; if (p >= -0.15 && p <= 1.15){ const q = clamp(p,0,1); return {x:0.6, y:0.8 - 0.46*ease(q), a: p<0 ? 1+p/0.15 : p>1 ? 1-(p-1)/0.15 : 1}; } }
+  if (s.sideDef){ const [a,b] = s.sideDef, p = (t-a)/(b-a); if (p >= -0.15 && p <= 1.15){ const q = clamp(p,0,1); return {x:0.84 - 0.66*ease(q), y:0.58, a: p<0 ? 1+p/0.15 : p>1 ? 1-(p-1)/0.15 : 1}; } }
+  return null;
+}
+const swDemoTilt = (s, t) => s.tiltDef ? 0.5*ease(clamp((t - s.tiltDef[0])/(s.tiltDef[1]-s.tiltDef[0]), 0, 1)) : 0;
+function makeDemo(bg, ups, side, dur, label, tilt){
+  const s = {kind:"demo", name:label, bg, ups, sideDef:side, tiltDef:tilt, duration:dur, status:"ready"};
+  const n = Math.round(dur*30)+1, t=[], v=[], h=[]; let prev = null, pt = 0;
+  for (let i=0;i<n;i++){ const tt = i/30, f = swDemoFinger(s, tt), tl = swDemoTilt(s, tt); t.push(tt);
+    let vv = -(tl - pt)*AH, hv = 0; if (f && prev){ vv += (prev.y - f.y)*AH; hv = (prev.x - f.x)*AW; }
+    v.push(vv); h.push(hv); prev = f; pt = tl; }
+  s.raw = {t, v, h}; buildMotion(s); return s;
+}
+function swLoadDemo(){ SW.scenes = [
+  makeDemo(["#26324a","#5c3a4c"], [0.8,2.4,4.0], [5.5,6.2], 6.6, "Sample clip 1 · ends with side swipe"),
+  makeDemo(["#1d4a44","#2c2f5e"], [0.8,2.4], null, 5.2, "Sample clip 2 · ends with camera tilt", [4.2,4.9]),
+  makeDemo(["#4a3a1d","#5e2c45"], [0.8,2.4,4.0], null, 5.6, "Sample clip 3")]; SW.demo = true; }
+function swDrawDemo(ctx, s, t){
+  const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0, s.bg[0]); g.addColorStop(1, s.bg[1]); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  const ty = swDemoTilt(s, t)*H;
+  ctx.fillStyle = "rgba(255,255,255,.07)"; ctx.beginPath(); ctx.arc(540, 980 + ty, 300, 0, Math.PI*2); ctx.fill();
+  for (let k=-6;k<6;k++){ ctx.fillStyle = "rgba(255,255,255,.04)"; ctx.fillRect(0, (k*260 + ty) % (H+260), W, 60); }
+  ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.font = "600 30px Figtree, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText(s.name.toUpperCase(), SAFE.left, SAFE.top - 60);
+  const f = swDemoFinger(s, t);
+  if (f){ const x = f.x*W, y = f.y*H; ctx.globalAlpha = Math.max(0, f.a);
+    const rg = ctx.createRadialGradient(x,y,10,x,y,90); rg.addColorStop(0,"rgba(255,224,200,.95)"); rg.addColorStop(1,"rgba(255,224,200,0)");
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x,y,90,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#f2c9ac"; ctx.beginPath(); ctx.ellipse(x, y+120, 46, 150, 0, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; }
+}
+const swLast = i => i === SW.scenes.length-1;
+const swTrans = i => swLast(i) ? null : (S.format === "scenes" ? SW.scenes[i].transAny : SW.scenes[i].transX) || null;
+const swSpan = i => { const t = swTrans(i); return t ? t.t1 : SW.scenes[i].duration; };
+const swWordsEnd = i => { const t = swTrans(i); return t ? t.t0 : SW.scenes[i].duration; };
+const swStart = i => { let a = 0; for (let k=0;k<i;k++) a += swSpan(k); return a; };
+const swTotal = () => { let a = 0; for (let k=0;k<SW.scenes.length;k++) a += swSpan(k); return Math.max(a, 0.1); };
+function swLocate(T){ let a = 0; for (let i=0;i<SW.scenes.length;i++){ const d = swSpan(i); if (T < a + d || swLast(i)) return {i, lt: clamp(T - a, 0, d)}; a += d; } return {i:0, lt:0}; }
+function swP(i, lt){ const tr = swTrans(i); if (!tr || lt < tr.t0) return 0; return clamp(interp(tr.t, tr.H, lt), 0, 1); }
+function swScroll(i, lt, L){
+  const D = travelDist(L, S.end), endT = swWordsEnd(i), t = Math.min(lt, endT);
+  if (S.sync === "steady") return Math.min(1, t/Math.max(0.1, endT)) * D;
+  const m = SW.scenes[i].motion; if (!m) return 0;
+  const U = interp(m.t, m.U, t), tot = interp(m.t, m.U, endT); if (tot < 1e-4) return 0;
+  return S.fit === "fit" ? Math.min(U/tot, 1) * D * S.travel : U*H*S.travel;
+}
+function swDrawScene(ctx, i, lt, dx, dy, still){
+  const s = SW.scenes[i]; ctx.save(); ctx.translate(dx, dy);
+  if (s.kind === "demo") swDrawDemo(ctx, s, still ? 0 : lt);
+  else if (still || SW.active !== i || s.video.readyState < 2 || (s.video.seeking && lt < 0.3)) ctx.drawImage(s.poster, 0, 0);
+  else coverVid(ctx, s.video, 0, 0, W, H);
+  ctx.restore();
+}
+function swSectionL(i){ const secs = sectionsOf(S.words[S.format] || ""); return layoutFor(secs[i] || ""); }
+function swWordsOpts(i, lt, L, dx, dy){
+  if (S.format === "scenes") return {top: staticTop(L, S.pos), dx, dy, fade:false};
+  return {top: startTop(L) - swScroll(i, lt, L), dx, dy, fade:true};
+}
+const SWIPE = {
+  total: swTotal,
+  render(ctx, T){
+    const loc = swLocate(T), i = loc.i, s = SW.scenes[i]; let lt = loc.lt;
+    if ((Rt.playing || Rt.exporting) && s.kind === "video" && SW.active === i && !s.video.paused && !s.video.seeking) lt = Math.min(s.video.currentTime, swSpan(i));
+    const p = swP(i, lt), L = swSectionL(i);
+    if (p > 0){
+      const tr = swTrans(i), x0 = tr.dx*p*W, y0 = tr.dy*p*H, x1 = x0 - tr.dx*W, y1 = y0 - tr.dy*H, L2 = swSectionL(i+1);
+      swDrawScene(ctx, i, lt, x0, y0, false); swDrawScene(ctx, i+1, 0, x1, y1, true);
+      drawWords(ctx, L, swWordsOpts(i, lt, L, x0, y0));
+      if (S.format === "scenes" && S.sceneIn === "type") drawWords(ctx, L2, {top: staticTop(L2, S.pos), dx:0, dy:0, fade:false, reveal: p});
+      else drawWords(ctx, L2, swWordsOpts(i+1, 0, L2, x1, y1));
+    } else {
+      swDrawScene(ctx, i, lt, 0, 0, false); drawWords(ctx, L, swWordsOpts(i, lt, L, 0, 0));
+    }
+  },
+  sync(playing){
+    const {i, lt} = swLocate(Rt.T); SW.active = i;
+    SW.scenes.forEach((s, k) => { if (s.kind !== "video") return; if (k === i) playSync(s.video, lt, playing, 0.25); else if (!s.video.paused) s.video.pause(); });
+  },
+  lanes(){ return SW.scenes.map((s, i) => ({row:0, t0:swStart(i), t1:swStart(i)+swSpan(i), color: i % 2 ? "--laneB" : "--laneA", label:`Clip ${i+1}`})); },
+  legend: [["--laneA","Clips"],["--cap","Captions"]],
+  hasAudio: () => SW.scenes.some(s => s.kind === "video"),
+  ready: () => SW.scenes.every(s => s.status === "ready"),
+};
+async function addClips(files){
+  if (SW.demo){ SW.scenes = []; SW.demo = false; }
+  stop();
+  for (const f of files){
+    const s = {kind:"video", name:f.name, status:"loading", duration:1}; SW.scenes.push(s); renderClips();
+    let v; try { v = await openVideo(f); } catch(e){ s.status = "error"; renderClips(); continue; }
+    s.video = v; regVideo(v, () => S.clipVol); s.duration = v.duration || 1; await seekV(v, 0);
+    s.poster = document.createElement("canvas"); s.poster.width = W; s.poster.height = H; coverVid(s.poster.getContext("2d"), v, 0, 0, W, H);
+    s.crop = Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02; s.status = "queued"; renderClips();
+    queue = queue.then(() => analyze(s));
+  }
+  SW.scenes = SW.scenes.filter(s => s.status !== "error" || true);
+  Rt.T = 0; Rt.dirty = true;
+}
+let queue = Promise.resolve();
+function renderClips(){
+  const ul = $("clips"); if (!ul) return; ul.innerHTML = "";
+  $("clipCount").textContent = SW.demo ? "Sample: 3 clips. Add yours to replace them." : `${SW.scenes.length} clip${SW.scenes.length===1?"":"s"}`;
+  SW.scenes.forEach((s, i) => {
+    const li = document.createElement("li"); li.className = "clip";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = String(i+1).padStart(2,"0");
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = s.name;
+    const ctl = document.createElement("span"); ctl.className = "ctl";
+    if (!SW.demo){
+      const mk = (lbl, title, fn, dis) => { const b = document.createElement("button"); b.className = "btn sm"; b.textContent = lbl; b.title = title; b.setAttribute("aria-label", title); b.disabled = dis || Rt.analyzing > 0 || Rt.exporting; b.onclick = fn; ctl.appendChild(b); };
+      mk("↑", "Move up", () => moveClip(i, -1), i === 0); mk("↓", "Move down", () => moveClip(i, 1), swLast(i)); mk("✕", "Remove clip", () => removeClip(i));
+    }
+    const st = document.createElement("span"); st.className = "st";
+    if (s.status === "loading") st.textContent = "Loading…";
+    else if (s.status === "queued") st.textContent = "Waiting to analyze…";
+    else if (s.status === "analyzing") st.textContent = `Finding your swipes… ${s.prog||0}%`;
+    else if (s.status === "error"){ st.className = "st warn"; st.textContent = "This file wouldn't open. Try an MP4 or MOV from your phone."; }
+    else {
+      const sc = S.format === "scenes", k = s.motion ? s.motion.swipes : 0, sd = sc ? s.transAny : s.transX, parts = [`${s.duration.toFixed(1)}s`];
+      if (!sc) parts.push(`${k} up-swipe${k===1?"":"s"}`);
+      const dir = sd ? "scene exits " + (sd.ax === "x" ? (sd.dx < 0 ? "left" : "right") : (sd.dy < 0 ? "up" : "down")) : "";
+      if (swLast(i)) parts.push("last clip, plays to end");
+      else if (sd) parts.push(sc ? `${dir} at ${sd.t0.toFixed(1)}s` : `side swipe at ${sd.t0.toFixed(1)}s → next clip`);
+      else parts.push(sc ? "no swipe or camera move found, hard cut at end" : "no side swipe, hard cut at end");
+      if (s.crop) parts.push("cropped to 9:16");
+      st.textContent = parts.join(" · ");
+      st.className = "st " + ((!sc && k === 0 && S.sync === "motion") || (!swLast(i) && !sd) ? "warn" : "ok");
+    }
+    li.append(n, nm, ctl, st); ul.appendChild(li);
+  });
+  updateSecNote();
+}
+function moveClip(i, d){ const j = i+d; if (j < 0 || j >= SW.scenes.length) return; [SW.scenes[i], SW.scenes[j]] = [SW.scenes[j], SW.scenes[i]]; stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
+function removeClip(i){ const s = SW.scenes.splice(i,1)[0]; if (s && s.video) unregVideo(s.video); if (!SW.scenes.length) swLoadDemo(); stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
+function updateSecNote(){
+  const el = $("secNote"); if (!el || (S.format !== "prompter" && S.format !== "scenes")) return;
+  const n = sectionsOf(S.words[S.format] || "").length, k = SW.scenes.length;
+  if (n === k){ el.className = "note ok"; el.textContent = `${n} section${n===1?"":"s"} for ${k} clip${k===1?"":"s"}. Matched.`; }
+  else if (n < k){ el.className = "note warn"; el.textContent = `${n} section${n===1?"":"s"} for ${k} clips. Clip${k-n>1?"s":""} ${Array.from({length:k-n},(_,j)=>n+j+1).join(", ")} will have no words.`; }
+  else { el.className = "note warn"; el.textContent = `${n} sections but only ${k} clip${k===1?"":"s"}. The extra section${n-k>1?"s":""} won't show.`; }
+}
+
+/* =============== FORMAT: react & respond =============== */
+const RC = {a:null, b:null};
+const RC_DEMO = {a:4.2, b:6.0};
+const rcDur = k => RC[k] ? Math.max(0.1, RC[k].end - RC[k].start) : RC_DEMO[k];
+const rcSeq = () => S.layout === "stitch" || S.timing === "seq";
+const rcTotal = () => rcSeq() ? rcDur("a") + rcDur("b") : Math.max(rcDur("a"), rcDur("b"));
+function rcLocal(T){ const dA = rcDur("a"), dB = rcDur("b");
+  if (rcSeq()) return {a:{lt:clamp(T,0,dA), on:T < dA}, b:{lt:clamp(T-dA,0,dB), on:T >= dA && T < dA+dB}};
+  return {a:{lt:clamp(T,0,dA), on:T < dA}, b:{lt:clamp(T,0,dB), on:T < dB}}; }
+const canFilter = (() => { try { const t = document.createElement("canvas").getContext("2d"); t.filter = "blur(2px)"; return t.filter === "blur(2px)"; } catch(e){ return false; } })();
+function drawPhoto(ctx, img, x, y, w, h, prog){
+  const iw = img.naturalWidth, ih = img.naturalHeight; ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  const cs = Math.max(w/iw, h/ih)*1.15; if (canFilter) ctx.filter = "blur(40px) brightness(0.55)";
+  ctx.drawImage(img, x + (w - iw*cs)/2, y + (h - ih*cs)/2, iw*cs, ih*cs); ctx.filter = "none";
+  if (!canFilter){ ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(x, y, w, h); }
+  const fs = Math.min(w*0.86/iw, h*0.8/ih) * (1 + 0.06*clamp(prog, 0, 1)), dw = iw*fs, dh = ih*fs;
+  ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 40*w/W; ctx.shadowOffsetY = 12*w/W; ctx.drawImage(img, x + (w - dw)/2, y + (h - dh)/2, dw, dh); ctx.restore();
+}
+function rcDemo(ctx, k, x, y, w, h, lt, on){
+  const g = ctx.createLinearGradient(x, y, x, y+h);
+  if (k === "a"){ g.addColorStop(0,"#3b2a6b"); g.addColorStop(1,"#1d1838"); } else { g.addColorStop(0,"#0f4c4c"); g.addColorStop(1,"#13263a"); }
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  const s = Math.min(w, h*0.5625)/1080, cx = x + w/2, cy = y + h*0.5, pulse = on ? 1 + 0.06*Math.sin(lt*9) : 1;
+  ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.beginPath(); ctx.arc(cx, cy - 120*s, 170*s*pulse, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.beginPath(); ctx.ellipse(cx, cy + 260*s, 300*s, 220*s, 0, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = `700 ${Math.round(44*s)}px Figtree, sans-serif`;
+  ctx.fillText(k === "a" ? "SAMPLE · WHAT YOU'RE REACTING TO" : "SAMPLE · YOUR RESPONSE", cx, cy + 420*s, w*0.9);
+}
+function rcDraw(ctx, k, x, y, w, h, L){
+  const c = RC[k]; if (!c) return rcDemo(ctx, k, x, y, w, h, L[k].lt, L[k].on);
+  if (c.kind === "image") return drawPhoto(ctx, c.img, x, y, w, h, L[k].lt/Math.max(0.1, rcDur(k)));
+  if (c.video.readyState >= 2) coverVid(ctx, c.video, x, y, w, h);
+}
+function rcTag(ctx, x, y, scale){
+  const txt = S.credit.trim(); if (!txt) return; const fs = Math.round(34*scale); ctx.font = `700 ${fs}px Figtree, sans-serif`;
+  const tw = ctx.measureText(txt).width, ph = fs*0.6, pv = fs*0.35;
+  ctx.fillStyle = "rgba(0,0,0,.6)"; rr(ctx, x, y, tw + ph*2, fs + pv*2, (fs+pv*2)/2); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(txt, x + ph, y + (fs+pv*2)/2 + 1);
+}
+const REACT = {
+  total: rcTotal,
+  render(ctx, T){
+    const L = rcLocal(T), dA = rcDur("a");
+    if (S.layout === "stitch"){ if (T < dA){ rcDraw(ctx, "a", 0, 0, W, H, L); rcTag(ctx, SAFE.left, SAFE.bottom - 80, 1); } else rcDraw(ctx, "b", 0, 0, W, H, L); }
+    else if (S.layout === "split"){
+      rcDraw(ctx, "a", 0, 0, W, H/2, L); rcDraw(ctx, "b", 0, H/2, W, H/2, L); ctx.fillStyle = "#fff"; ctx.fillRect(0, H/2 - 3, W, 6);
+      rcTag(ctx, SAFE.left, H/2 - 90, 1);
+      if (rcSeq()){ ctx.fillStyle = "rgba(0,0,0,.35)"; if (T < dA) ctx.fillRect(0, H/2+3, W, H/2-3); else ctx.fillRect(0, 0, W, H/2-3); }
+    } else {
+      const bw = 440, bh = Math.round(bw*16/9), box = {x: S.corner === "tr" ? SAFE.right - bw : SAFE.left, y: SAFE.top, w: bw, h: bh};
+      if (rcSeq() && T < dA){ rcDraw(ctx, "a", 0, 0, W, H, L); rcTag(ctx, SAFE.left, SAFE.bottom - 80, 1); }
+      else {
+        rcDraw(ctx, "b", 0, 0, W, H, L);
+        const p = rcSeq() ? ease(clamp((T - dA)/0.55, 0, 1)) : 1, r = {x: box.x*p, y: box.y*p, w: W + (box.w - W)*p, h: H + (box.h - H)*p}, rad = 30*p;
+        ctx.save(); if (p > 0){ ctx.shadowColor = `rgba(0,0,0,${0.5*p})`; ctx.shadowBlur = 36; ctx.shadowOffsetY = 10; ctx.fillStyle = "#fff"; rr(ctx, r.x-6*p, r.y-6*p, r.w+12*p, r.h+12*p, rad+6*p); ctx.fill(); }
+        ctx.restore(); ctx.save(); rr(ctx, r.x, r.y, r.w, r.h, rad); ctx.clip(); rcDraw(ctx, "a", r.x, r.y, r.w, r.h, L); ctx.restore();
+        if (p >= 1) rcTag(ctx, r.x + 16, r.y + r.h - 64, 0.75);
+      }
+    }
+  },
+  sync(playing){ const L = rcLocal(Rt.T); for (const k of ["a","b"]){ const c = RC[k]; if (c && c.kind === "video") playSync(c.video, c.start + L[k].lt, playing && L[k].on, 0.35); } },
+  lanes(){ const dA = rcDur("a"), dB = rcDur("b");
+    return rcSeq() ? [{row:0, t0:0, t1:dA, color:"--laneA", label:"Theirs"}, {row:0, t0:dA, t1:dA+dB, color:"--laneB", label:"You"}]
+                   : [{row:0, t0:0, t1:dA, color:"--laneA", label:"Theirs"}, {row:1, t0:0, t1:dB, color:"--laneB", label:"You"}]; },
+  legend: [["--laneA","What you're reacting to"],["--laneB","You"],["--cap","Captions"]],
+  hasAudio: () => ["a","b"].some(k => RC[k] && RC[k].kind === "video"),
+  ready: () => true,
+};
+async function loadReact(k, file){
+  const old = RC[k]; if (old && old.kind === "video") unregVideo(old.video);
+  const meta = $(k === "a" ? "metaA" : "metaB");
+  if (file.type.startsWith("image/")){
+    const img = new Image(); img.src = URL.createObjectURL(file);
+    try { await img.decode(); } catch(e){ meta.textContent = "That image wouldn't open. Try a JPG or PNG."; return; }
+    RC[k] = {kind:"image", img, name:file.name, full:30, start:0, end:3}; meta.textContent = `${file.name} · photo`;
+  } else {
+    let v; try { v = await openVideo(file); } catch(e){ meta.textContent = "That file wouldn't open. Try an MP4 or MOV from your phone."; RC[k] = null; syncUI(); return; }
+    regVideo(v, () => k === "a" ? S.volA : S.volB);
+    RC[k] = {kind:"video", video:v, name:file.name, full:v.duration || 1, start:0, end:v.duration || 1};
+    meta.textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s` + (Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02 ? " · will be cropped to fit" : "");
+  }
+  stop(); Rt.T = 0; syncUI(); renderCaps(); changed();
+}
+
+/* =============== FORMAT: green screen =============== */
+const GR = {fg:null, bgImg:null, bgVid:null};
+const keyer = (() => {
+  let gl = null, cv = null, prog, loc = {}, ok = null;
+  const VS = "attribute vec2 p; varying vec2 uv; void main(){ uv = vec2(p.x*0.5+0.5, 0.5-p.y*0.5); gl_Position = vec4(p,0.,1.); }";
+  const FS = `precision mediump float; varying vec2 uv; uniform sampler2D tex; uniform vec3 key; uniform float sim, smo, spill; uniform int mode;
+    vec2 cc(vec3 c){ return vec2(c.r*-0.169 + c.g*-0.331 + c.b*0.5 + 0.5, c.r*0.5 + c.g*-0.419 + c.b*-0.081 + 0.5); }
+    void main(){ vec4 c = texture2D(tex, uv);
+      if (mode == 1){ gl_FragColor = vec4(c.rgb*c.a, c.a); return; }
+      float d = distance(cc(c.rgb), cc(key)), base = d - sim;
+      float a = pow(clamp(base/smo, 0., 1.), 1.5);
+      float lum = clamp(dot(c.rgb, vec3(0.2126,0.7152,0.0722)), 0., 1.);
+      float sp = pow(clamp(base/spill, 0., 1.), 1.5);
+      vec3 col = mix(vec3(lum), c.rgb, sp);
+      gl_FragColor = vec4(col*a, a); }`;
+  function init(){
+    cv = document.createElement("canvas"); gl = cv.getContext("webgl", {premultipliedAlpha:true, preserveDrawingBuffer:true, alpha:true});
+    if (!gl) return false;
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+    prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return false;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    const pl = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(pl); gl.vertexAttribPointer(pl, 2, gl.FLOAT, false, 0, 0);
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    for (const [k, v] of [[gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER, gl.LINEAR],[gl.TEXTURE_MAG_FILTER, gl.LINEAR]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    for (const n of ["key","sim","smo","spill","mode"]) loc[n] = gl.getUniformLocation(prog, n);
+    return true;
+  }
+  return {
+    process(v){
+      if (ok === null) ok = init(); if (!ok) return null;
+      let w = v.videoWidth, h = v.videoHeight; const sc = Math.min(1, 1920/Math.max(w, h)); w = Math.round(w*sc); h = Math.round(h*sc);
+      if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+      gl.viewport(0, 0, w, h);
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v); } catch(e){ return null; }
+      const k = S.keyCol.replace("#",""), kr = parseInt(k.slice(0,2),16)/255, kg = parseInt(k.slice(2,4),16)/255, kb = parseInt(k.slice(4,6),16)/255;
+      gl.uniform3f(loc.key, kr, kg, kb); gl.uniform1f(loc.sim, S.keySim); gl.uniform1f(loc.smo, S.keySmooth); gl.uniform1f(loc.spill, S.keySpill);
+      gl.uniform1i(loc.mode, S.keyMode === "alpha" ? 1 : 0);
+      gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      return cv;
+    },
+    supported(){ if (ok === null) ok = init(); return ok; }
+  };
+})();
+const grDur = () => GR.fg ? Math.max(0.1, GR.fg.end - GR.fg.start) : 8;
+function grPlace(sw, sh){ const s0 = Math.max(W/sw, H/sh)*S.fgScale, w = sw*s0, h = sh*s0; return {x:(W - w)/2 + S.fgX*W, y:(H - h)/2 + S.fgY*H, w, h}; }
+function grDemoPerson(ctx, T){
+  const r = grPlace(W, H), s = r.w/W, cx = r.x + r.w/2, cy = r.y + r.h/2, bob = Math.sin(T*2.2)*8*s;
+  ctx.save(); ctx.fillStyle = "#e9c3a6";
+  ctx.beginPath(); ctx.arc(cx, cy - 260*s + bob, 150*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#2d6a8e"; ctx.beginPath(); ctx.ellipse(cx, cy + 420*s + bob, 360*s, 460*s, 0, Math.PI, 0); ctx.fillRect(cx - 360*s, cy + 420*s + bob - 1, 720*s, 600*s); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.font = `700 ${Math.round(34*s)}px Figtree, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("SAMPLE · YOU", cx, cy + 640*s + bob); ctx.restore();
+}
+const GREEN = {
+  total: grDur,
+  render(ctx, T){
+    // 1. background
+    if (S.bgType === "image" && GR.bgImg) coverInto(ctx, GR.bgImg, GR.bgImg.naturalWidth, GR.bgImg.naturalHeight, 0, 0, W, H);
+    else if (S.bgType === "video" && GR.bgVid && GR.bgVid.readyState >= 2) coverVid(ctx, GR.bgVid, 0, 0, W, H);
+    else { const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0, S.bgCol1); g.addColorStop(1, S.bgCol2); ctx.fillStyle = g; ctx.fillRect(0,0,W,H); }
+    if (S.bgDim > 0){ ctx.fillStyle = `rgba(0,0,0,${S.bgDim})`; ctx.fillRect(0,0,W,H); }
+    // 2. words behind
+    if (S.behind !== "none"){
+      const text = (S.words.green || "").replace(/^\s*-{3,}\s*$/mg, ""), L = layoutFor(text);
+      if (S.behind === "still") drawWords(ctx, L, {top: staticTop(L, S.gpos), fade:false});
+      else drawWords(ctx, L, {top: startTop(L) - clamp(T/grDur(), 0, 1)*travelDist(L, "exit"), fade:true});
+    }
+    // 3. you
+    if (!GR.fg) return grDemoPerson(ctx, T);
+    const v = GR.fg.video; if (v.readyState < 2) return;
+    const out = keyer.process(v);
+    if (out){ const r = grPlace(out.width, out.height); ctx.drawImage(out, r.x, r.y, r.w, r.h); }
+    else { const r = grPlace(v.videoWidth, v.videoHeight); ctx.drawImage(v, r.x, r.y, r.w, r.h); }
+  },
+  sync(playing){
+    if (GR.fg) playSync(GR.fg.video, GR.fg.start + clamp(Rt.T, 0, grDur()), playing && Rt.T < grDur(), 0.3);
+    if (GR.bgVid){ const d = GR.bgVid.duration || 1, want = (Rt.T % d); playSync(GR.bgVid, want, playing && S.bgType === "video", 0.5); }
+  },
+  lanes(){ return [{row:0, t0:0, t1:grDur(), color:"--laneB", label:"You"}, {row:1, t0:0, t1:grDur(), color:"--laneA", label: S.bgType === "video" ? "Background video" : S.bgType === "image" ? "Background photo" : "Background color"}]; },
+  legend: [["--laneB","You"],["--laneA","Background"],["--cap","Captions"]],
+  hasAudio: () => !!GR.fg || (!!GR.bgVid && S.bgType === "video"),
+  ready: () => true,
+};
+function autoKey(){
+  if (!GR.fg) return; const v = GR.fg.video, c = document.createElement("canvas"); c.width = 64; c.height = 114;
+  const x = c.getContext("2d", {willReadFrequently:true}); x.drawImage(v, 0, 0, 64, 114);
+  const d = x.getImageData(0, 0, 64, 114).data; let r = 0, g = 0, b = 0, n = 0;
+  for (let yy = 0; yy < 18; yy++) for (const xx of [0,1,2,3,4,5,6,7,8,55,56,57,58,59,60,61,62,63]){ const i = (yy*64 + xx)*4; r += d[i]; g += d[i+1]; b += d[i+2]; n++; }
+  const hex = v => Math.round(v/n).toString(16).padStart(2,"0"); S.keyCol = "#" + hex(r) + hex(g) + hex(b); $("keyCol").value = S.keyCol; changed();
+}
+async function loadFg(file){
+  if (GR.fg) unregVideo(GR.fg.video);
+  let v; try { v = await openVideo(file); } catch(e){ $("fgMeta").textContent = "That file wouldn't open. Try an MP4, MOV or WebM."; GR.fg = null; return; }
+  regVideo(v, () => S.fgVol); GR.fg = {video:v, name:file.name, full:v.duration || 1, start:0, end:v.duration || 1};
+  $("fgMeta").textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s`;
+  await seekV(v, 0); if (S.keyMode === "color") autoKey();
+  if (!keyer.supported()) $("fgMeta").textContent += " · this browser can't remove the background (WebGL is off)";
+  stop(); Rt.T = 0; syncUI(); renderCaps(); changed();
+}
+
+const MODS = {prompter:SWIPE, scenes:SWIPE, react:REACT, green:GREEN};
+const mod = () => MODS[S.format] || SWIPE;
+const total = () => mod().total();
+
+/* =============== captions =============== */
+function wrap(ctx, text, maxW){ const words = text.split(/\s+/).filter(Boolean), lines = []; let cur = "";
+  for (const w of words){ const t = cur ? cur + " " + w : w; if (cur && ctx.measureText(t).width > maxW){ lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur); return lines; }
+function stampColor(t){ if (/\b(false|myth|wrong|nope|no|fake|busted)\b/i.test(t)) return ["#e5484d","#fff"]; if (/\b(true|fact|yes|right|correct|legit)\b/i.test(t)) return ["#22a06b","#fff"]; return ["#ffd54a","#141414"]; }
+function posY(pos, h){ if (pos === "top") return SAFE.top + 30; if (pos === "bottom") return SAFE.bottom - 30 - h; return (SAFE.top + SAFE.bottom)/2 - h/2; }
+function drawCaption(ctx, cap, T){
+  const age = T - cap.t0, left = cap.t1 - T; if (age < 0 || left < 0 || !cap.text.trim()) return;
+  const anim = cap.anim || "pop", inP = clamp(age/0.22, 0, 1), alpha = clamp(left/0.18, 0, 1);
+  const maxW = SAFE.right - SAFE.left - 40, cx = (SAFE.left + SAFE.right)/2;
+  ctx.save(); ctx.globalAlpha = alpha;
+  if (cap.style === "stamp"){
+    let fs = 170; ctx.font = `900 ${fs}px Archivo, "Arial Black", sans-serif`;
+    const full = cap.text.trim().toUpperCase(); let tw = ctx.measureText(full).width;
+    if (tw > maxW - 80){ fs = Math.floor(fs*(maxW-80)/tw); ctx.font = `900 ${fs}px Archivo, "Arial Black", sans-serif`; tw = ctx.measureText(full).width; }
+    const bw = tw + 90, bh = fs*1.25, cy = posY(cap.pos, bh) + bh/2, [bg, fg] = stampColor(full);
+    let txt = full, s = 1;
+    if (anim === "type") txt = full.slice(0, Math.max(1, Math.ceil(age*14)));
+    else if (anim === "slide"){ ctx.translate(0, (1 - ease(inP))*60); ctx.globalAlpha = alpha*inP; }
+    else s = 1.6 - 0.6*ease(inP);
+    ctx.translate(cx, cy); ctx.rotate(-7*Math.PI/180); ctx.scale(s, s);
+    ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10; ctx.fillStyle = bg; rr(ctx, -bw/2, -bh/2, bw, bh, 22); ctx.fill();
+    ctx.shadowColor = "transparent"; ctx.lineWidth = 8; ctx.strokeStyle = "rgba(255,255,255,.85)"; rr(ctx, -bw/2+14, -bh/2+14, bw-28, bh-28, 14); ctx.stroke();
+    ctx.fillStyle = fg; ctx.textBaseline = "middle"; ctx.textAlign = "left"; ctx.fillText(txt, -tw/2, fs*0.04);
+  } else {
+    const fs = 66, banner = cap.style === "banner"; ctx.font = `800 ${fs}px Figtree, system-ui, sans-serif`;
+    const lines = wrap(ctx, cap.text.trim(), maxW - (banner ? 70 : 0)), lh = fs*1.22;
+    const widest = Math.max(...lines.map(l => ctx.measureText(l).width)), bw = widest + 70, bh = lines.length*lh + 44, y = posY(cap.pos, bh);
+    let charLimit = Infinity, wordLimit = Infinity;
+    if (anim === "type") charLimit = Math.floor(age*24);
+    else if (anim === "words") wordLimit = Math.floor(age/0.22) + 1;
+    else if (anim === "slide"){ ctx.translate(0, (1 - ease(inP))*50); ctx.globalAlpha = alpha*inP; }
+    else { const s = 0.85 + 0.15*ease(inP); ctx.translate(cx, y + bh/2); ctx.scale(s, s); ctx.translate(-cx, -(y + bh/2)); ctx.globalAlpha = alpha*Math.min(1, inP*1.6); }
+    if (banner){ ctx.save(); ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 6; ctx.fillStyle = "rgba(255,255,255,.96)"; rr(ctx, cx - bw/2, y, bw, bh, 26); ctx.fill(); ctx.restore(); ctx.fillStyle = "#121212"; }
+    else { ctx.shadowColor = "rgba(0,0,0,.7)"; ctx.shadowBlur = 22; ctx.shadowOffsetY = 4; ctx.fillStyle = "#fff"; }
+    ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    let chars = 0, words = 0;
+    for (let i=0;i<lines.length;i++){
+      const l = lines[i], lw = ctx.measureText(l).width, ly = y + 22 + lh*i + lh/2 + 2; let show = l;
+      if (charLimit !== Infinity){ show = l.slice(0, Math.max(0, charLimit - chars)); chars += l.length + 1; }
+      if (wordLimit !== Infinity){ const ws = l.split(" "), k = Math.max(0, Math.min(ws.length, wordLimit - words)); show = ws.slice(0, k).join(" "); words += ws.length; }
+      if (show) ctx.fillText(show, cx - lw/2, ly);
+    }
+  }
+  ctx.restore();
+}
+const PRESETS = [["True or False?","banner","top",3,"words"],["Here's what the experts say","banner","bottom",3,"type"],["Let's break it down","banner","top",3,"slide"],
+  ["MYTH","stamp","middle",1.6,"pop"],["FACT","stamp","middle",1.6,"pop"],["FALSE","stamp","middle",1.6,"pop"],["TRUE","stamp","middle",1.6,"pop"],["Your text","plain","middle",3,"words"]];
+function renderPresets(){
+  const box = $("presets"); box.innerHTML = "";
+  for (const [text, style, pos, len, anim] of PRESETS){
+    const b = document.createElement("button"); b.className = "btn sm"; b.textContent = text === "Your text" ? "+ Custom" : text;
+    b.onclick = () => { const tot = total(); let t0 = Rt.T; if (t0 > tot - 0.5) t0 = Math.max(0, tot - len); t0 = Math.round(t0*10)/10;
+      const t1 = Math.round(Math.min(tot, t0 + len)*10)/10; caps().push({text, t0, t1, pos, style, anim}); renderCaps(); persist(); showCap({t0, t1});
+      if (text === "Your text"){ const ins = $("caps").querySelectorAll("input[type=text]"); const el = ins[ins.length-1]; el && (el.focus(), el.select()); } };
+    box.appendChild(b);
+  }
+}
+function showCap(cp){ if (Rt.playing) return; const t = Math.min(cp.t0 + 0.6, (cp.t0 + cp.t1)/2); if (Rt.T < cp.t0 + 0.25 || Rt.T > cp.t1 - 0.25) seek(t); else Rt.dirty = true; }
+function capProblem(cp){ const tot = total(); if (!cp.text.trim()) return "Type some text to show this caption."; if (!(cp.t1 > cp.t0)) return "The To time needs to be after the From time.";
+  if (cp.t0 >= tot) return `Starts after the video ends (${tot.toFixed(1)}s). Lower the From time.`; return ""; }
+function renderCaps(){
+  const ul = $("caps"); ul.innerHTML = ""; const list = caps();
+  if (!list.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "No captions yet. Tap a preset above to add one."; ul.appendChild(p); return; }
+  list.forEach(cp => {
+    const li = document.createElement("li"); li.className = "cap";
+    const warn = document.createElement("p"); warn.className = "note warn"; warn.style.gridColumn = "1/-1";
+    const check = () => { const m = capProblem(cp); warn.textContent = m; warn.hidden = !m; };
+    const edited = () => { persist(); check(); showCap(cp); };
+    const tx = document.createElement("input"); tx.type = "text"; tx.value = cp.text; tx.setAttribute("aria-label","Caption text");
+    tx.oninput = () => { cp.text = tx.value; edited(); }; tx.onfocus = () => showCap(cp);
+    const num = (lbl, key) => { const l = document.createElement("label"); l.textContent = lbl; const i = document.createElement("input"); i.type = "number"; i.step = "0.1"; i.min = "0"; i.value = cp[key];
+      i.oninput = () => { const v = parseFloat(i.value); if (!isNaN(v)){ cp[key] = v; edited(); } }; l.appendChild(i); return l; };
+    const sel = (lbl, key, opts) => { const l = document.createElement("label"); l.textContent = lbl; const s = document.createElement("select");
+      for (const [v, t] of opts){ const o = document.createElement("option"); o.value = v; o.textContent = t; s.appendChild(o); } s.value = cp[key] || opts[0][0];
+      s.onchange = () => { cp[key] = s.value; edited(); }; l.appendChild(s); return l; };
+    const go = document.createElement("button"); go.className = "btn sm"; go.textContent = "Show"; go.title = "Jump the preview to this caption";
+    go.onclick = () => { stop(); seek(Math.min(cp.t0 + 0.6, (cp.t0 + cp.t1)/2)); };
+    const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "✕"; del.title = "Delete caption"; del.setAttribute("aria-label","Delete caption");
+    del.onclick = () => { S.caps[S.format] = caps().filter(x => x !== cp); renderCaps(); persist(); Rt.dirty = true; };
+    const acts = document.createElement("span"); acts.className = "acts"; acts.append(go, del);
+    li.append(tx, num("From (s)","t0"), num("To (s)","t1"), sel("Where","pos",[["top","Top"],["middle","Middle"],["bottom","Bottom"]]),
+      sel("Style","style",[["banner","Banner"],["stamp","Stamp"],["plain","Plain"]]), sel("Animation","anim",[["pop","Pop"],["type","Typewriter"],["words","Word by word"],["slide","Slide up"]]), acts, warn);
+    check(); ul.appendChild(li);
+  });
+}
+
+/* =============== b-roll =============== */
+function brRect(style){
+  if (style === "card"){ const w = SAFE.right - SAFE.left - 40, h = Math.round(w*1.25); return {x: SAFE.left + 20, y: SAFE.top + 30, w, h, r:28, card:true}; }
+  if (style === "top") return {x:0, y:0, w:W, h:H/2, r:0, card:false, divider:true};
+  return {x:0, y:0, w:W, h:H, r:0, card:false};
+}
+function drawBroll(ctx, b, T){
+  const age = T - b.t0, left = b.t1 - T; if (age < 0 || left < 0) return;
+  const img = IMAGES.get((b.key || "").toLowerCase()), d = Math.max(0.1, b.t1 - b.t0), td = Math.min(0.4, d/3);
+  const inP = ease(clamp(age/td, 0, 1)), outP = ease(clamp(left/td, 0, 1)), entering = age < td, p = Math.min(inP, outP);
+  const r = brRect(b.style); let ox = 0, scale = 1, alpha = 1;
+  if (b.trans === "slide") ox = entering ? (1 - inP)*W : -(1 - outP)*W;
+  else if (b.trans === "zoom"){ scale = 1.18 - 0.18*p; alpha = p; }
+  else alpha = p;
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.translate(r.x + r.w/2 + ox, r.y + r.h/2); ctx.scale(scale, scale); ctx.translate(-(r.x + r.w/2), -(r.y + r.h/2));
+  if (r.card){ ctx.save(); ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14; ctx.fillStyle = "#fff"; rr(ctx, r.x-10, r.y-10, r.w+20, r.h+20, r.r+10); ctx.fill(); ctx.restore(); }
+  ctx.save(); rr(ctx, r.x, r.y, r.w, r.h, r.r); ctx.clip();
+  if (img){ const kb = 1 + 0.08*clamp(age/d, 0, 1), iw = img.naturalWidth, ih = img.naturalHeight, s = Math.max(r.w/iw, r.h/ih)*kb;
+    ctx.drawImage(img, r.x + (r.w - iw*s)/2, r.y + (r.h - ih*s)/2, iw*s, ih*s); }
+  else { ctx.fillStyle = "#3a3f4b"; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = "#fff"; ctx.font = "600 36px Figtree, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(`Add photo again: ${b.key}`, r.x + r.w/2, r.y + r.h/2, r.w - 60); }
+  ctx.restore();
+  if (r.divider){ ctx.fillStyle = "#fff"; ctx.fillRect(0, H/2 - 3, W, 6); }
+  ctx.restore();
+}
+function renderBroll(){
+  const ul = $("brList"); if (!ul) return; ul.innerHTML = ""; const list = brolls();
+  if (!list.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "No b-roll yet."; ul.appendChild(p); return; }
+  list.forEach(b => {
+    const li = document.createElement("li"); li.className = "cap br";
+    const head = document.createElement("div"); head.className = "brHead"; const th = document.createElement("img"); th.alt = "";
+    const img = IMAGES.get(b.key.toLowerCase()); if (img) th.src = img.src;
+    const nm = document.createElement("span"); nm.textContent = img ? b.key : `${b.key} (add this photo again)`; head.append(th, nm);
+    const warn = document.createElement("p"); warn.className = "note warn"; warn.style.gridColumn = "1/-1";
+    const check = () => { const tot = total(); const m = !(b.t1 > b.t0) ? "The To time needs to be after the From time." : b.t0 >= tot ? `Starts after the video ends (${tot.toFixed(1)}s).` : ""; warn.textContent = m; warn.hidden = !m; };
+    const edited = () => { persist(); check(); showCap(b); };
+    const num = (lbl, key) => { const l = document.createElement("label"); l.textContent = lbl; const i = document.createElement("input"); i.type = "number"; i.step = "0.1"; i.min = "0"; i.value = b[key];
+      i.oninput = () => { const v = parseFloat(i.value); if (!isNaN(v)){ b[key] = v; edited(); } }; l.appendChild(i); return l; };
+    const sel = (lbl, key, opts) => { const l = document.createElement("label"); l.textContent = lbl; const s = document.createElement("select");
+      for (const [v, t] of opts){ const o = document.createElement("option"); o.value = v; o.textContent = t; s.appendChild(o); } s.value = b[key]; s.onchange = () => { b[key] = s.value; edited(); }; l.appendChild(s); return l; };
+    const go = document.createElement("button"); go.className = "btn sm"; go.textContent = "Show"; go.onclick = () => { stop(); seek(Math.min(b.t0 + 0.6, (b.t0 + b.t1)/2)); };
+    const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "✕"; del.title = "Remove b-roll"; del.setAttribute("aria-label","Remove b-roll");
+    del.onclick = () => { S.broll[S.format] = brolls().filter(x => x !== b); renderBroll(); persist(); Rt.dirty = true; };
+    const acts = document.createElement("span"); acts.className = "acts"; acts.append(go, del);
+    li.append(head, num("From (s)","t0"), num("To (s)","t1"), sel("Shows as","style",[["full","Full screen"],["card","Card"],["top","Top half"]]),
+      sel("Comes in","trans",[["fade","Fade"],["slide","Slide"],["zoom","Zoom"]]), acts, warn);
+    check(); ul.appendChild(li);
+  });
+}
+$("brIn").addEventListener("change", async e => {
+  const files = [...e.target.files]; e.target.value = ""; if (!files.length) return;
+  const tot = total(), len = 2.5; let t = Rt.T > tot - 0.5 ? 0 : Rt.T;
+  for (const f of files){
+    const key = f.name.replace(/[\[\]]/g, ""); const img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.size = f.size; img.dataset.broll = "1";
+    try { await img.decode(); } catch(err){ continue; }
+    IMAGES.set(key.toLowerCase(), img);
+    const t0 = Math.round(Math.min(t, Math.max(0, tot - 1))*10)/10, t1 = Math.round(Math.min(tot, t0 + len)*10)/10;
+    brolls().push({key, t0, t1, style:"full", trans:"fade"}); t = t1;
+  }
+  imgVer++; renderBroll(); renderImages(); persist(); const lastB = brolls()[brolls().length-1]; if (lastB) showCap(brolls()[brolls().length - files.length] || lastB);
+});
+
+/* =============== render + timeline =============== */
+function drawGuides(ctx){
+  ctx.save(); ctx.fillStyle = "rgba(214,57,59,.2)";
+  ctx.fillRect(0,0,W,SAFE.top); ctx.fillRect(0,SAFE.bottom,W,H-SAFE.bottom); ctx.fillRect(SAFE.right,SAFE.top,W-SAFE.right,SAFE.bottom-SAFE.top);
+  ctx.setLineDash([18,14]); ctx.lineWidth = 4; ctx.strokeStyle = "rgba(255,255,255,.75)"; ctx.strokeRect(SAFE.left, SAFE.top, SAFE.right-SAFE.left, SAFE.bottom-SAFE.top);
+  ctx.setLineDash([]); ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.font = "600 30px Figtree, sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
+  ctx.fillText("Platform header", W/2, SAFE.top/2 + 30); ctx.fillText("Caption, username, buttons", W/2, (SAFE.bottom+H)/2);
+  ctx.save(); ctx.translate((SAFE.right+W)/2, (SAFE.top+SAFE.bottom)/2); ctx.rotate(-Math.PI/2); ctx.fillText("Like / comment / share", 0, 0); ctx.restore(); ctx.restore();
+}
+function render(ctx, T, preview){
+  ctx.save(); ctx.fillStyle = "#000"; ctx.fillRect(0,0,W,H); mod().render(ctx, T); ctx.restore();
+  for (const b of brolls()) drawBroll(ctx, b, T);
+  for (const cp of caps()) drawCaption(ctx, cp, T);
+  if (preview && S.guides) drawGuides(ctx);
+}
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function drawTimeline(){
+  const c = $("timeline"), x = c.getContext("2d"), cw = c.width, ch = c.height, tot = total(), sx = t => 8 + (cw-16)*clamp(t,0,tot)/tot;
+  x.clearRect(0,0,cw,ch); x.fillStyle = css("--field"); rr(x, 0, 0, cw, ch, 14); x.fill();
+  const lane = (y, h, t0, t1, col, label) => { x.fillStyle = col; rr(x, sx(t0), y, Math.max(6, sx(t1)-sx(t0)-2), h, 8); x.fill();
+    if (label){ x.fillStyle = "#fff"; x.font = "600 22px Figtree, sans-serif"; x.textBaseline = "middle"; x.textAlign = "left";
+      x.save(); x.beginPath(); x.rect(sx(t0), y, sx(t1)-sx(t0), h); x.clip(); x.fillText(label, sx(t0)+12, y+h/2+1); x.restore(); } };
+  for (const l of mod().lanes()) lane(l.row ? 40 : 6, 30, l.t0, l.t1, css(l.color), l.label);
+  brolls().forEach(b => lane(76, 26, b.t0, b.t1, css("--fg"), b.key));
+  caps().forEach((cp, i) => lane(108 + (i%2)*32, 28, cp.t0, cp.t1, css("--cap"), cp.text));
+  x.fillStyle = css("--fg"); x.fillRect(sx(Rt.T)-1.5, 0, 3, ch);
+}
+$("timeline").addEventListener("click", e => { const r = e.currentTarget.getBoundingClientRect(); seek(clamp((e.clientX - r.left - 8*r.width/960)/(r.width*(1-16/960)), 0, 1)*total()); });
+
+/* =============== playback =============== */
+const pctx = $("preview").getContext("2d");
+function fmt(t){ const m = Math.floor(t/60), s = t - m*60; return `${m}:${s.toFixed(1).padStart(4,"0")}`; }
+function play(){ if (Rt.exporting || Rt.analyzing) return; ensureAudio(); if (Rt.T >= total() - 0.05) Rt.T = 0; Rt.playing = true; $("playBtn").textContent = "Pause"; setBusy(); }
+function stop(){ Rt.playing = false; pauseAll(); $("playBtn").textContent = "Play"; setBusy(); }
+function seek(t){ Rt.playing = false; pauseAll(); $("playBtn").textContent = "Play"; Rt.T = clamp(t, 0, total()); mod().sync(false); Rt.dirty = true; setBusy(); }
+let last = performance.now();
+function tick(now){
+  const dt = Math.min(0.1, (now-last)/1000); last = now;
+  if (Rt.playing && !Rt.exporting){ Rt.T += dt; if (Rt.T >= total()){ Rt.T = total(); stop(); } mod().sync(Rt.playing); Rt.dirty = true; }
+  if (Rt.dirty || (S.format === "green" && GR.fg)){
+    render(pctx, Rt.T, true); drawTimeline(); const tot = total();
+    $("scrub").value = Math.round(Rt.T/tot*1000) || 0; $("time").textContent = `${fmt(Rt.T)} / ${fmt(tot)}`; Rt.dirty = false; }
+  requestAnimationFrame(tick);
+}
+
+/* =============== export =============== */
+function pickMime(audio){
+  const list = audio ? ["video/mp4;codecs=avc1.640028,mp4a.40.2","video/mp4;codecs=avc1,mp4a.40.2","video/mp4;codecs=avc1,opus","video/mp4","video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"]
+                     : ["video/mp4;codecs=avc1.640028","video/mp4;codecs=avc1","video/mp4","video/webm;codecs=vp9","video/webm"];
+  for (const m of list) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; return "";
+}
+let dlP = null;
+function getDownloads(){ if (!dlP) dlP = (window.claude && window.claude.use) ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null); return dlP; }
+async function exportVideo(){
+  const note = $("exNote"); if (Rt.exporting) return;
+  if (Rt.analyzing || !mod().ready()){ note.className = "note warn"; note.textContent = "Wait for your clips to finish analyzing first."; return; }
+  const hasAudio = mod().hasAudio(); if (hasAudio) ensureAudio();
+  const mime = pickMime(hasAudio && !!recDest);
+  if (!mime || !HTMLCanvasElement.prototype.captureStream){ note.className = "note warn"; note.textContent = "This browser can't record video. Try the latest Chrome or Safari on a computer."; return; }
+  stop(); Rt.exporting = true; setBusy();
+  const bar = $("exBar"); bar.hidden = false; bar.firstElementChild.style.width = "0%"; note.className = "note"; note.textContent = "Recording… keep this tab in front.";
+  const ec = document.createElement("canvas"); ec.width = W; ec.height = H; const ectx = ec.getContext("2d"), stream = ec.captureStream(30);
+  if (hasAudio && recDest) for (const tr of recDest.stream.getAudioTracks()) stream.addTrack(tr);
+  const rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:12e6, audioBitsPerSecond:160000});
+  const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise(r => rec.onstop = r), tot = total();
+  try {
+    Rt.T = 0; mod().sync(false);
+    await Promise.all([...MEDIA].map(e => e.v.seeking ? new Promise(r => e.v.addEventListener("seeked", r, {once:true})) : null));
+    render(ectx, 0, false); rec.start(250);
+    await new Promise(resolve => { const t0 = performance.now();
+      const loop = now => { Rt.T = Math.min(tot, Math.max(0, (now - t0)/1000));
+        mod().sync(Rt.T < tot); render(ectx, Rt.T, false); Rt.dirty = true; bar.firstElementChild.style.width = (Rt.T/tot*100) + "%";
+        if (Rt.T >= tot){ resolve(); return; } requestAnimationFrame(loop); };
+      requestAnimationFrame(loop); });
+    await new Promise(r => setTimeout(r, 200));
+  } finally { if (rec.state !== "inactive") rec.stop(); }
+  await stopped; pauseAll(); bar.hidden = true; Rt.exporting = false; setBusy();
+  const ext = mime.includes("mp4") ? "mp4" : "webm", blob = new Blob(chunks, {type: mime.split(";")[0]});
+  const res = $("result"); res.src = URL.createObjectURL(blob); res.hidden = false;
+  const d = new Date(), p2 = x => String(x).padStart(2,"0");
+  const name = `stitch-${S.format}-${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.${ext}`;
+  const tip = ext === "webm" ? " Your browser recorded WebM. Instagram wants MP4, so use Safari or a recent Chrome, or convert it in Canva." : "";
+  const dl = await getDownloads();
+  if (!dl){ try { const a = document.createElement("a"); a.href = res.src; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      note.className = "note ok"; note.textContent = `Downloaded ${name} (${(blob.size/1048576).toFixed(1)} MB). Check your Downloads folder.` + tip; }
+    catch(e){ note.className = "note warn"; note.textContent = "Done, but this browser blocked the download. Right-click the preview above and choose Save Video As." + tip; } return; }
+  try { await dl.save({filename:name, data:blob}); note.className = "note ok"; note.textContent = `Saved ${name} (${(blob.size/1048576).toFixed(1)} MB).` + tip; }
+  catch(e){ const code = e && e.code; note.className = "note warn";
+    note.textContent = code === "declined" ? "Save cancelled. Click Export again when you're ready." : code === "rate_limited" ? "A save prompt is already open. Finish that one first." : "Couldn't save the file here. You can watch it above." + tip; }
+}
+
+/* =============== wizard UI =============== */
+function setBusy(){
+  const busy = Rt.analyzing > 0 || Rt.exporting;
+  $("tally").classList.toggle("on", busy || Rt.playing);
+  $("tallyTxt").textContent = Rt.exporting ? "Recording" : Rt.analyzing ? "Analyzing" : Rt.playing ? "Playing" : "Standby";
+  for (const id of ["exportBtn","playBtn","vidIn","inA","inB","fgIn"]) { const el = $(id); if (el) el.disabled = busy; }
+}
+function showStep(){
+  const f = FORMATS[S.format];
+  $$(".step[data-panel]").forEach(p => p.hidden = true);
+  if (!f){ $$('.step[data-panel="format"]')[0].hidden = false; $("wiz").hidden = true; $("nav").hidden = true; return; }
+  S.step = clamp(S.step, 0, f.steps.length-1);
+  const [pid, title] = f.steps[S.step], panel = document.querySelector(`.step[data-panel="${pid}"]`);
+  panel.hidden = false; panel.querySelector(".num").textContent = `STEP ${S.step+1} OF ${f.steps.length}`; panel.querySelector(".ttl").textContent = title;
+  $$("[data-for]").forEach(el => el.hidden = !el.dataset.for.split(" ").includes(S.format));
+  $("wiz").hidden = false; $("nav").hidden = false; $("fmtName").textContent = f.name;
+  const ol = $("steps"); ol.innerHTML = "";
+  f.steps.forEach(([, t], i) => { const li = document.createElement("li"), b = document.createElement("button"); b.textContent = `${i+1}. ${t}`;
+    b.className = i === S.step ? "on" : i < S.step ? "done" : ""; b.onclick = () => { S.step = i; persist(); showStep(); }; li.appendChild(b); ol.appendChild(li); });
+  $("backBtn").disabled = false; $("backBtn").textContent = S.step === 0 ? "Formats" : "Back";
+  $("nextBtn").hidden = S.step === f.steps.length-1; $("nextBtn").textContent = `Next: ${f.steps[Math.min(S.step+1, f.steps.length-1)][1]}`;
+  $("stepOf").textContent = "";
+  if (pid === "captions") renderCaps();
+  if (pid === "broll") renderBroll();
+  if (pid === "clips") renderClips();
+  if (pid === "words"){ $("words").value = S.words[S.format] || ""; updateSecNote(); updateImgNote(); }
+  outs();
+}
+function setFormat(fmt){
+  stop(); S.format = fmt; S.step = 0; Rt.T = 0; persist();
+  $$(".card").forEach(c => c.classList.toggle("on", c.dataset.fmt === fmt));
+  $("legend").innerHTML = mod().legend.map(([c, t]) => `<span><i class="swatch" style="background:var(${c})"></i>${t}</span>`).join("") + `<span><i class="swatch" style="background:var(--fg)"></i>B-roll</span><span>Tap the timeline to jump</span>`;
+  renderClips(); showStep(); mod().sync(false); Rt.dirty = true;
+}
+function radio(name, val){ const el = document.querySelector(`input[name=${name}][value="${val}"]`); if (el) el.checked = true; }
+function syncUI(){
+  for (const n of ["sync","fit","end","pos","sceneIn","em","style","align","layout","timing","corner","keyMode","bgType","behind","gpos"]) radio(n, S[n]);
+  for (const id of ["travel","minMove","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim"]) $(id).value = S[id];
+  $("font").value = S.font; $("weight").value = S.weight; $("emCol").value = S.emCol; $("credit").value = S.credit;
+  $("keyCol").value = S.keyCol; $("bgCol1").value = S.bgCol1; $("bgCol2").value = S.bgCol2;
+  for (const k of ["a","b"]){ const c = RC[k], K = k.toUpperCase(), s = $("s"+K), e = $("e"+K);
+    s.disabled = e.disabled = !c; s.value = c ? c.start.toFixed(1) : ""; e.value = c ? c.end.toFixed(1) : ""; s.placeholder = e.placeholder = c ? "" : "Upload first"; }
+  const isImg = RC.a && RC.a.kind === "image"; $("sAWrap").hidden = isImg; $("volAWrap").hidden = isImg; $("eALbl").textContent = isImg ? "Show it for (sec)" : "End at (sec)";
+  const g = GR.fg; $("fgS").disabled = $("fgE").disabled = !g; $("fgS").value = g ? g.start.toFixed(1) : ""; $("fgE").value = g ? g.end.toFixed(1) : ""; $("fgS").placeholder = $("fgE").placeholder = g ? "" : "Upload first";
+  outs();
+}
+const pct = v => Math.round(v*100) + "%";
+const LAYOUT_NOTES = {stitch:"Their clip plays full screen, then cuts to you.", pip:"Their clip plays, then shrinks into a corner while you respond. With Both at once, it stays in the corner the whole time.", split:"Theirs on top, you on the bottom. With Theirs first, the half that isn't playing dims."};
+function outs(){
+  const o = (id, t) => { const el = $(id+"Out"); if (el) el.textContent = t; };
+  o("travel", S.travel.toFixed(2)+"×"); o("minMove", S.minMove.toFixed(1)); o("size", S.size+" px"); o("leading", S.leading.toFixed(2)); o("imgScale", pct(S.imgScale));
+  o("clipVol", pct(S.clipVol)); o("volA", pct(S.volA)); o("volB", pct(S.volB)); o("fgVol", pct(S.fgVol)); o("bgVol", pct(S.bgVol)); o("bgDim", pct(S.bgDim));
+  o("keySim", S.keySim.toFixed(2)); o("keySmooth", S.keySmooth.toFixed(2)); o("keySpill", S.keySpill.toFixed(2)); o("fgScale", pct(S.fgScale)); o("fgX", pct(S.fgX)); o("fgY", pct(S.fgY));
+  $("motionOpts").hidden = S.sync !== "motion";
+  const f = FONTS[S.font] || FONTS.figtree; $("fontNote").hidden = !(f.single && S.em === "bold"); $("weight").disabled = !!f.single;
+  $("layoutNote").textContent = LAYOUT_NOTES[S.layout]; $("timingWrap").hidden = S.layout === "stitch"; $("cornerWrap").hidden = S.layout !== "pip";
+  $("keyOpts").hidden = S.keyMode !== "color";
+  $("bgColorOpts").hidden = S.bgType !== "color"; $("bgImgOpts").hidden = S.bgType !== "image"; $("bgVidOpts").hidden = S.bgType !== "video";
+  if (S.format === "green") $("gposWrap").hidden = S.behind !== "still";
+}
+function changed(){ outs(); updateVols(); persist(); Rt.dirty = true; }
+
+/* images in words */
+function renderImages(){
+  const box = $("imgList"); box.innerHTML = "";
+  for (const [key, img] of IMAGES){
+    if (img.dataset.broll) continue;
+    const c = document.createElement("div"); c.className = "chip"; const th = document.createElement("img"); th.src = img.src; th.alt = "";
+    const nm = document.createElement("span"); nm.textContent = img.dataset.name;
+    const x = document.createElement("button"); x.className = "btn sm"; x.textContent = "✕"; x.title = `Remove ${img.dataset.name}`; x.setAttribute("aria-label", x.title);
+    x.onclick = () => { IMAGES.delete(key); URL.revokeObjectURL(img.src); imgVer++; renderImages(); Rt.dirty = true; };
+    c.append(th, nm, x); box.appendChild(c);
+  }
+  updateImgNote();
+}
+function updateImgNote(){
+  const text = S.words[S.format] || "";
+  const missing = [...new Set(text.split("\n").map(l => (l.trim().match(IMG_RE) || [])[1]).filter(n => n && !IMAGES.has(n.toLowerCase())))];
+  const note = $("imgNote"); note.hidden = !missing.length;
+  if (missing.length) note.textContent = `Missing image${missing.length>1?"s":""}: ${missing.join(", ")}. Images aren't saved between visits, so add ${missing.length>1?"them":"it"} again with the same file name.`;
+}
+
+/* events */
+$$(".card").forEach(c => c.addEventListener("click", () => setFormat(c.dataset.fmt)));
+$("changeFmt").addEventListener("click", () => { stop(); S.format = null; persist(); showStep(); });
+$("backBtn").addEventListener("click", () => { if (S.step === 0){ stop(); S.format = null; persist(); showStep(); } else { S.step--; persist(); showStep(); } });
+$("nextBtn").addEventListener("click", () => { S.step++; persist(); showStep(); window.scrollTo({top:0, behavior:"smooth"}); });
+const radios = {sync:1, fit:1, end:1, pos:1, sceneIn:1, em:1, style:1, align:1, layout:1, timing:1, corner:1, keyMode:1, bgType:1, behind:1, gpos:1};
+for (const name in radios) $$(`input[name=${name}]`).forEach(r => r.addEventListener("change", e => {
+  S[name] = e.target.value;
+  if (name === "layout" || name === "timing"){ seek(Math.min(Rt.T, total())); renderCaps(); }
+  if (name === "sync") renderClips();
+  if (name === "bgType") mod().sync(Rt.playing);
+  changed(); }));
+for (const id of ["travel","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim"])
+  $(id).addEventListener("input", e => { S[id] = +e.target.value; changed(); });
+$("minMove").addEventListener("input", e => { S.minMove = +e.target.value; SW.scenes.forEach(s => s.raw && buildMotion(s)); renderClips(); changed(); });
+$("font").addEventListener("change", e => { S.font = e.target.value; loadFont(); changed(); });
+$("weight").addEventListener("change", e => { S.weight = e.target.value; changed(); });
+for (const id of ["emCol","keyCol","bgCol1","bgCol2"]) $(id).addEventListener("input", e => { S[id] = e.target.value; changed(); });
+$("credit").addEventListener("input", e => { S.credit = e.target.value; changed(); });
+$("guides").addEventListener("change", e => { S.guides = e.target.checked; Rt.dirty = true; });
+$("words").addEventListener("input", e => { S.words[S.format] = e.target.value; updateSecNote(); updateImgNote(); changed(); });
+$("emBtn").addEventListener("click", () => {
+  const ta = $("words"), a = ta.selectionStart, b = ta.selectionEnd; if (a === b){ ta.focus(); return; }
+  let s = a, e = b; while (s < e && /\s/.test(ta.value[s])) s++; while (e > s && /\s/.test(ta.value[e-1])) e--;
+  ta.value = ta.value.slice(0,s) + "*" + ta.value.slice(s,e) + "*" + ta.value.slice(e); S.words[S.format] = ta.value; ta.focus(); ta.setSelectionRange(s, e+2); changed(); });
+$("txtIn").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return; S.words[S.format] = await f.text(); $("words").value = S.words[S.format]; e.target.value = ""; updateSecNote(); changed(); });
+$("imgIn").addEventListener("change", async e => {
+  const files = [...e.target.files]; e.target.value = ""; if (!files.length) return; const ta = $("words"), names = [];
+  for (const f of files){ let name = f.name.replace(/[\[\]]/g, ""), base = name, n = 2;
+    while (IMAGES.has(name.toLowerCase()) && IMAGES.get(name.toLowerCase()).dataset.size != f.size) name = base.replace(/(\.\w+)?$/, `-${n++}$1`);
+    const img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = name; img.dataset.size = f.size;
+    try { await img.decode(); } catch(err){ continue; } IMAGES.set(name.toLowerCase(), img); names.push(name); }
+  const refd = new Set(ta.value.split("\n").map(l => ((l.trim().match(IMG_RE) || [])[1] || "").toLowerCase()));
+  const add = names.filter(nm => !refd.has(nm.toLowerCase()));
+  if (add.length){ const pos = ta.selectionStart ?? ta.value.length, before = ta.value.slice(0, pos), after = ta.value.slice(pos);
+    const ins = (before && !before.endsWith("\n") ? "\n" : "") + add.map(nm => `[image: ${nm}]`).join("\n") + (after.startsWith("\n") ? "" : "\n");
+    ta.value = before + ins + after; ta.setSelectionRange(pos + ins.length, pos + ins.length); S.words[S.format] = ta.value; persist(); }
+  imgVer++; renderImages(); updateSecNote(); Rt.dirty = true;
+});
+$("vidIn").addEventListener("change", e => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) addClips(fs); });
+for (const k of ["a","b"]){ const K = k.toUpperCase();
+  $("in"+K).addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadReact(k, f); });
+  const trim = () => { const c = RC[k]; if (!c) return; let s = parseFloat($("s"+K).value), en = parseFloat($("e"+K).value);
+    if (isNaN(s)) s = 0; if (isNaN(en)) en = c.full; s = clamp(s, 0, c.full - 0.2); en = clamp(en, s + 0.2, c.full); c.start = s; c.end = en; seek(Math.min(Rt.T, total())); renderCaps(); changed(); };
+  $("s"+K).addEventListener("change", trim); $("e"+K).addEventListener("change", trim); }
+$("fgIn").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadFg(f); });
+const fgTrim = () => { const g = GR.fg; if (!g) return; let s = parseFloat($("fgS").value), en = parseFloat($("fgE").value);
+  if (isNaN(s)) s = 0; if (isNaN(en)) en = g.full; s = clamp(s, 0, g.full - 0.2); en = clamp(en, s + 0.2, g.full); g.start = s; g.end = en; seek(Math.min(Rt.T, total())); renderCaps(); changed(); };
+$("fgS").addEventListener("change", fgTrim); $("fgE").addEventListener("change", fgTrim);
+$("autoKey").addEventListener("click", autoKey);
+$("bgImgIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const img = new Image(); img.src = URL.createObjectURL(f);
+  try { await img.decode(); } catch(err){ $("bgImgMeta").textContent = "That image wouldn't open. Try a JPG or PNG."; return; }
+  GR.bgImg = img; $("bgImgMeta").textContent = f.name; S.bgType = "image"; radio("bgType","image"); changed(); });
+$("bgVidIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (GR.bgVid) unregVideo(GR.bgVid);
+  let v; try { v = await openVideo(f); } catch(err){ $("bgVidMeta").textContent = "That file wouldn't open. Try an MP4 or MOV."; return; }
+  v.loop = true; regVideo(v, () => S.bgVol); GR.bgVid = v; $("bgVidMeta").textContent = `${f.name} · ${(v.duration||0).toFixed(1)}s`; S.bgType = "video"; radio("bgType","video"); changed(); mod().sync(false); });
+$("playBtn").addEventListener("click", () => Rt.playing ? stop() : play());
+$("scrub").addEventListener("input", e => seek(+e.target.value/1000*total()));
+$("exportBtn").addEventListener("click", exportVideo);
+
+function loadFont(){ const f = FONTS[S.font] || FONTS.figtree; if (!document.fonts || !document.fonts.load) return;
+  Promise.all([f.w.reg, f.w.semi, f.w.bold, f.em].map(w => document.fonts.load(`${w} 72px "${f.fam}"`))).catch(()=>{}).then(() => { layoutKey = ""; Rt.dirty = true; }); }
+
+/* boot */
+swLoadDemo(); syncUI(); renderPresets(); renderImages(); setBusy(); loadFont();
+if (document.fonts && document.fonts.load) Promise.all(["800 66px Figtree","900 170px Archivo","600 30px Figtree"].map(f => document.fonts.load(f))).catch(()=>{}).then(() => { layoutKey = ""; Rt.dirty = true; });
+if (S.format && FORMATS[S.format]){ const st = S.step; setFormat(S.format); S.step = st; showStep(); }
+else { S.format = null; showStep(); $("legend").innerHTML = ""; }
+requestAnimationFrame(tick);
+getDownloads();
+})();
+</script>
+
+</body>
+</html>
