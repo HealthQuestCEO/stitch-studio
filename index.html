@@ -125,6 +125,15 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
 .subhead{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
 .subhead:first-of-type{border-top:0;padding-top:0}
 .cap.co{border-left-color:var(--accent)}
+.trimmer{grid-column:1/-1;display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);margin-top:4px}
+.trimmer video{width:110px;aspect-ratio:9/16;object-fit:cover;border-radius:8px;background:#000;display:block}
+.trimmer .tcol{display:flex;flex-direction:column;gap:8px;min-width:0}
+.trimmer canvas{width:100%;height:60px;display:block;border-radius:6px;touch-action:none;cursor:pointer;background:#000}
+.trimmer canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.trimmer .tbtns{display:flex;flex-wrap:wrap;gap:6px}
+.trimmer .tread{font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.trimmer .tmsg{font-size:12.5px;color:var(--warn);margin:0}
+@media (max-width:440px){.trimmer{grid-template-columns:1fr}.trimmer video{width:96px}}
 #saveState{white-space:nowrap}
 #saveState.warn{white-space:normal;color:var(--warn)}
 .saved .acts2{display:flex;gap:4px}
@@ -195,8 +204,8 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
       <!-- CLIPS (prompter, scenes) -->
       <section class="step" data-panel="clips" hidden>
         <h2><b class="num"></b><span class="ttl"></span></h2>
-        <p class="lead" data-for="prompter">Upload the clip of you swiping up, or several clips if you want more than one scene. End a clip with a side swipe to slide into the next one.</p>
-        <p class="lead" data-for="scenes">Upload one clip per scene, in order. End each clip with a swipe or camera move, sideways or a tilt up or down. That move carries you into the next clip, so you don't need to trim.</p>
+        <p class="lead" data-for="prompter">Upload the clip of you swiping up, or several clips if you want more than one scene. End a clip with a side swipe to slide into the next one. Use <b>Trim</b> on a clip to cut its start or end, or to split it into two clips.</p>
+        <p class="lead" data-for="scenes">Upload one clip per scene, in order. End each clip with a swipe or camera move, sideways or a tilt up or down. That move carries you into the next clip. Made it as one long video in Edits? Upload it once, then use <b>Trim</b> and <b>Split here</b> to cut it into scenes.</p>
         <div class="row"><span class="btn file">Add clips<input type="file" id="vidIn" accept="video/*" multiple></span><span class="note" id="clipCount"></span></div>
         <ul class="clips" id="clips"></ul>
         <div class="slider"><label class="lbl" for="minMove">Ignore small movements</label><output id="minMoveOut"></output><input type="range" id="minMove" min="0" max="3" step="0.1"></div>
@@ -322,6 +331,7 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
           <div class="field" id="sAWrap"><label class="lbl" for="sA">Start at (sec)</label><input type="number" id="sA" min="0" step="0.1"></div>
           <div class="field"><label class="lbl" for="eA" id="eALbl">End at (sec)</label><input type="number" id="eA" min="0" step="0.1"></div>
         </div>
+        <div id="trimA"></div>
         <div class="slider" id="volAWrap"><label class="lbl" for="volA">Volume</label><output id="volAOut"></output><input type="range" id="volA" min="0" max="1.5" step="0.05"></div>
         <div class="field"><label class="lbl" for="credit">Label on it (optional)</label><input type="text" id="credit" placeholder="@creator, or My game: HealthQuest"></div>
         <p class="note">If it's someone else's video, use one you have permission to repost, or use the platform's Stitch or Remix.</p>
@@ -336,6 +346,7 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
           <div class="field"><label class="lbl" for="sB">Start at (sec)</label><input type="number" id="sB" min="0" step="0.1"></div>
           <div class="field"><label class="lbl" for="eB">End at (sec)</label><input type="number" id="eB" min="0" step="0.1"></div>
         </div>
+        <div id="trimB"></div>
         <div class="slider"><label class="lbl" for="volB">Volume</label><output id="volBOut"></output><input type="range" id="volB" min="0" max="1.5" step="0.05"></div>
       </section>
 
@@ -385,6 +396,7 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
           <div class="field"><label class="lbl" for="fgS">Start at (sec)</label><input type="number" id="fgS" min="0" step="0.1"></div>
           <div class="field"><label class="lbl" for="fgE">End at (sec)</label><input type="number" id="fgE" min="0" step="0.1"></div>
         </div>
+        <div id="trimFg"></div>
         <div class="slider"><label class="lbl" for="fgVol">Your volume</label><output id="fgVolOut"></output><input type="range" id="fgVol" min="0" max="1.5" step="0.05"></div>
       </section>
 
@@ -712,7 +724,10 @@ function findTrans(t, v, h, xOnly){
   return {t0:t[a], t1:t[g.b], a, b:g.b, ax:g.ax, dx: g.ax === "x" ? (g.sum > 0 ? -1 : 1) : 0, dy: g.ax === "y" ? (g.sum > 0 ? -1 : 1) : 0, t:st, H:sH.map(x => x/(acc||1))};
 }
 function buildMotion(s){
-  const {t, v, h} = s.raw, n = t.length;
+  // only the part of the clip that's kept counts; times become relative to the trim start
+  const R0 = s.raw, a = s.start || 0, b = s.end != null ? s.end : Infinity, t = [], v = [], h = [];
+  for (let i = 0; i < R0.t.length; i++) if (R0.t[i] >= a - 1e-6 && R0.t[i] <= b + 1e-6){ const first = !t.length; t.push(R0.t[i] - a); v.push(first ? 0 : R0.v[i]); h.push(first ? 0 : R0.h[i]); }
+  const n = t.length;
   s.transX = findTrans(t, v, h, true); s.transAny = findTrans(t, v, h, false);
   const sg = s.transX, U = new Array(n); let swipes = 0, quiet = 99;
   for (let i=0;i<n;i++){ const inSide = sg && i >= sg.a && i <= sg.b;
@@ -731,7 +746,7 @@ async function analyze(s){
   const step = tt => { coverVid(cx, v, 0, 0, AW, AH); const d = cx.getImageData(0,0,AW,AH).data, g = new Float32Array(AW*AH);
     for (let i=0,j=0;i<g.length;i++,j+=4) g[i] = 0.299*d[j] + 0.587*d[j+1] + 0.114*d[j+2];
     t.push(tt); vv.push(prev ? estShift(prev, g, "y", mask) : 0); hh.push(prev ? estShift(prev, g, "x", mask) : 0); prev = g;
-    const pc = Math.round(tt/s.duration*100); if (pc !== s.prog){ s.prog = pc; renderClips(); } };
+    const pc = Math.round(tt/(s.full || s.duration)*100); if (pc !== s.prog){ s.prog = pc; renderClips(); } };
   try {
     await seekV(v, 0);
     if ("requestVideoFrameCallback" in v){
@@ -739,7 +754,7 @@ async function analyze(s){
         const done = () => { if (fin) return; fin = true; v.removeEventListener("ended", done); resolve(); };
         const cb = (now, meta) => { if (fin) return; step(meta.mediaTime); if (!v.ended) v.requestVideoFrameCallback(cb); };
         v.requestVideoFrameCallback(cb); v.addEventListener("ended", done); v.play().catch(done); });
-    } else { for (let tt=0; tt<s.duration; tt += 1/30){ await seekV(v, tt); step(tt); } }
+    } else { for (let tt=0; tt<(s.full || s.duration); tt += 1/30){ await seekV(v, tt); step(tt); } }
   } finally {
     v.pause(); await seekV(v, 0); v._quiet = false; updateVols();
     s.raw = {t, v:vv, h:hh}; buildMotion(s); s.status = "ready"; Rt.analyzing--; setBusy(); renderClips(); Rt.dirty = true;
@@ -809,7 +824,7 @@ const SWIPE = {
   total: swTotal,
   render(ctx, T){
     const loc = swLocate(T), i = loc.i, s = SW.scenes[i]; let lt = loc.lt;
-    if ((Rt.playing || Rt.exporting) && s.kind === "video" && SW.active === i && !s.video.paused && !s.video.seeking) lt = Math.min(s.video.currentTime, swSpan(i));
+    if ((Rt.playing || Rt.exporting) && s.kind === "video" && SW.active === i && !s.video.paused && !s.video.seeking) lt = clamp(s.video.currentTime - (s.start || 0), 0, swSpan(i));
     const p = swP(i, lt), L = swSectionL(i);
     if (p > 0){
       const tr = swTrans(i), x0 = tr.dx*p*W, y0 = tr.dy*p*H, x1 = x0 - tr.dx*W, y1 = y0 - tr.dy*H, L2 = swSectionL(i+1);
@@ -823,7 +838,7 @@ const SWIPE = {
   },
   sync(playing){
     const {i, lt} = swLocate(Rt.T); SW.active = i;
-    SW.scenes.forEach((s, k) => { if (s.kind !== "video") return; if (k === i) playSync(s.video, lt, playing, 0.25); else if (!s.video.paused) s.video.pause(); });
+    SW.scenes.forEach((s, k) => { if (s.kind !== "video") return; if (k === i) playSync(s.video, (s.start || 0) + lt, playing, 0.25); else if (!s.video.paused) s.video.pause(); });
   },
   lanes(){ return SW.scenes.map((s, i) => ({row:0, t0:swStart(i), t1:swStart(i)+swSpan(i), color: i % 2 ? "--laneB" : "--laneA", label:`Clip ${i+1}`})); },
   legend: [["--laneA","Clips"],["--cap","Captions"]],
@@ -834,9 +849,9 @@ async function addClips(files){
   if (SW.demo){ SW.scenes = []; SW.demo = false; }
   stop();
   for (const f of files){
-    const s = {kind:"video", name:f.name, status:"loading", duration:1, file:f}; SW.scenes.push(s); renderClips();
+    const s = {kind:"video", name:f.name, status:"loading", duration:1, file:f, start:0}; SW.scenes.push(s); renderClips();
     let v; try { v = await openVideo(f); } catch(e){ s.status = "error"; renderClips(); continue; }
-    s.video = v; regVideo(v, () => S.clipVol); s.duration = v.duration || 1; await seekV(v, 0);
+    s.video = v; regVideo(v, () => S.clipVol); s.full = v.duration || 1; s.end = s.full; s.duration = s.full; await seekV(v, 0);
     s.poster = document.createElement("canvas"); s.poster.width = W; s.poster.height = H; coverVid(s.poster.getContext("2d"), v, 0, 0, W, H);
     s.crop = Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02; s.status = "queued"; renderClips();
     queue = queue.then(() => analyze(s));
@@ -855,6 +870,7 @@ function renderClips(){
     const ctl = document.createElement("span"); ctl.className = "ctl";
     if (!SW.demo){
       const mk = (lbl, title, fn, dis) => { const b = document.createElement("button"); b.className = "btn sm"; b.textContent = lbl; b.title = title; b.setAttribute("aria-label", title); b.disabled = dis || Rt.analyzing > 0 || Rt.exporting; b.onclick = fn; ctl.appendChild(b); };
+      mk(s._trim ? "Done" : "Trim", s._trim ? "Close the trim editor" : "Trim or split this clip", () => toggleClipTrim(s), !s.video);
       mk("↑", "Move up", () => moveClip(i, -1), i === 0); mk("↓", "Move down", () => moveClip(i, 1), swLast(i)); mk("✕", "Remove clip", () => removeClip(i));
     }
     const st = document.createElement("span"); st.className = "st";
@@ -864,6 +880,7 @@ function renderClips(){
     else if (s.status === "error"){ st.className = "st warn"; st.textContent = "This file wouldn't open. Try an MP4 or MOV from your phone."; }
     else {
       const sc = S.format === "scenes", k = s.motion ? s.motion.swipes : 0, sd = sc ? s.transAny : s.transX, parts = [`${s.duration.toFixed(1)}s`];
+      if (s.full && (s.start > 0.05 || s.end < s.full - 0.05)) parts.push(`uses ${s.start.toFixed(1)}–${s.end.toFixed(1)}s of the file`);
       if (!sc) parts.push(`${k} up-swipe${k===1?"":"s"}`);
       const dir = sd ? "scene exits " + (sd.ax === "x" ? (sd.dx < 0 ? "left" : "right") : (sd.dy < 0 ? "up" : "down")) : "";
       if (swLast(i)) parts.push("last clip, plays to end");
@@ -873,18 +890,141 @@ function renderClips(){
       st.textContent = parts.join(" · ");
       st.className = "st " + ((!sc && k === 0 && S.sync === "motion") || (!swLast(i) && !sd) ? "warn" : "ok");
     }
-    li.append(n, nm, ctl, st); ul.appendChild(li);
+    li.append(n, nm, ctl, st); if (s._trim){ li.appendChild(s._trim.root); s._trim.refresh(); } ul.appendChild(li);
   });
   updateSecNote();
 }
 function moveClip(i, d){ const j = i+d; if (j < 0 || j >= SW.scenes.length) return; [SW.scenes[i], SW.scenes[j]] = [SW.scenes[j], SW.scenes[i]]; stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
-function removeClip(i){ const s = SW.scenes.splice(i,1)[0]; if (s && s.video) unregVideo(s.video); if (!SW.scenes.length) swLoadDemo(); stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
+function removeClip(i){ const s = SW.scenes.splice(i,1)[0]; if (s && s._trim){ s._trim.destroy(); s._trim = null; } if (s && s.video) unregVideo(s.video); if (!SW.scenes.length) swLoadDemo(); stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
 function updateSecNote(){
   const el = $("secNote"); if (!el || (S.format !== "prompter" && S.format !== "scenes")) return;
   const n = sectionsOf(S.words[S.format] || "").length, k = SW.scenes.length;
   if (n === k){ el.className = "note ok"; el.textContent = `${n} section${n===1?"":"s"} for ${k} clip${k===1?"":"s"}. Matched.`; }
   else if (n < k){ el.className = "note warn"; el.textContent = `${n} section${n===1?"":"s"} for ${k} clips. Clip${k-n>1?"s":""} ${Array.from({length:k-n},(_,j)=>n+j+1).join(", ")} will have no words.`; }
   else { el.className = "note warn"; el.textContent = `${n} sections but only ${k} clip${k===1?"":"s"}. The extra section${n-k>1?"s":""} won't show.`; }
+}
+
+/* =============== trim & split editor =============== */
+const STRIP_N = 10, MIN_LEN = 0.3, FRAME = 1/30;
+const stripCache = new WeakMap();
+function stripFrames(file, full, onFrame){
+  // thumbnails across the whole file, drawn once per file
+  if (stripCache.has(file)){ const c = stripCache.get(file); c.done.then(() => onFrame()); return c; }
+  const c = {frames: new Array(STRIP_N).fill(null)}; stripCache.set(file, c);
+  c.done = (async () => {
+    const v = document.createElement("video"); v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = URL.createObjectURL(file);
+    try { await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; }); } catch(e){ return; }
+    for (let k = 0; k < STRIP_N; k++){
+      await seekV(v, Math.min(full - 0.05, (k + 0.5)*full/STRIP_N));
+      const t = document.createElement("canvas"); t.width = 72; t.height = 128; coverVid(t.getContext("2d"), v, 0, 0, 72, 128); c.frames[k] = t; onFrame();
+    }
+    URL.revokeObjectURL(v.src);
+  })();
+  return c;
+}
+/* o: {file, full, get:()=>[start,end], set:(start,end,final)=>void, split?:(t)=>Promise<string|void>} */
+function makeTrimmer(o){
+  const root = document.createElement("div"); root.className = "trimmer";
+  const v = document.createElement("video"); v.playsInline = true; v.preload = "auto"; v.src = URL.createObjectURL(o.file);
+  const col = document.createElement("div"); col.className = "tcol";
+  const cv = document.createElement("canvas"); cv.tabIndex = 0; cv.setAttribute("aria-label", "Trim strip. Drag the yellow handles to trim. Arrow keys move one frame.");
+  const read = document.createElement("div"); read.className = "tread";
+  const btns = document.createElement("div"); btns.className = "tbtns";
+  const msg = document.createElement("p"); msg.className = "tmsg"; msg.hidden = true;
+  const say = t => { msg.textContent = t || ""; msg.hidden = !t; };
+  const b = (label, title, fn) => { const x = document.createElement("button"); x.className = "btn sm"; x.textContent = label; x.title = title; x.setAttribute("aria-label", title); x.onclick = fn; btns.appendChild(x); return x; };
+  let raf = 0, dragging = null;
+  const T = () => v.currentTime || 0;
+  const seekTo = t => { v.pause(); v.currentTime = clamp(t, 0, o.full); draw(); };
+  const playBtn = b("Play", "Play the kept part", () => {
+    if (!v.paused){ v.pause(); return; }
+    const [st, en] = o.get(); if (T() < st || T() >= en - 0.05) v.currentTime = st; v.play().catch(() => {}); });
+  b("◀", "Back one frame", () => seekTo(T() - FRAME));
+  b("▶", "Forward one frame", () => seekTo(T() + FRAME));
+  b("Start here", "Make the playhead the new start", () => { const [, en] = o.get(); if (T() > en - MIN_LEN) return say("The start has to be before the end."); say(""); o.set(T(), en, true); draw(); });
+  b("End here", "Make the playhead the new end", () => { const [st] = o.get(); if (T() < st + MIN_LEN) return say("The end has to be after the start."); say(""); o.set(st, T(), true); draw(); });
+  if (o.split) b("Split here", "Cut this clip into two clips at the playhead", async () => {
+    const [st, en] = o.get(), t = T(); if (!(t > st + MIN_LEN && t < en - MIN_LEN)) return say("Move the playhead inside the kept part (not right at an edge), then split.");
+    v.pause(); const err = await o.split(t); say(err || ""); draw(); });
+  b("Reset", "Use the whole clip again", () => { say(""); o.set(0, o.full, true); draw(); });
+  v.addEventListener("play", () => { playBtn.textContent = "Pause"; const loop = () => { const [, en] = o.get(); if (T() >= en){ v.pause(); v.currentTime = en; } draw(); if (!v.paused) raf = requestAnimationFrame(loop); }; raf = requestAnimationFrame(loop); });
+  v.addEventListener("pause", () => { playBtn.textContent = "Play"; cancelAnimationFrame(raf); draw(); });
+  v.addEventListener("seeked", draw); v.addEventListener("loadeddata", () => { const [st] = o.get(); v.currentTime = st; draw(); });
+  const strip = stripFrames(o.file, o.full, () => draw());
+  function xOf(t){ return 10 + (cv.width - 20)*t/o.full; }
+  function tOf(clientX){ const r = cv.getBoundingClientRect(), x = (clientX - r.left)*cv.width/r.width; return clamp((x - 10)/(cv.width - 20)*o.full, 0, o.full); }
+  function draw(){
+    const dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(200, Math.round((cv.clientWidth || 300)*dpr)), h = Math.round(60*dpr);
+    if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+    const x = cv.getContext("2d"), [st, en] = o.get(), fw = (w - 20)/STRIP_N;
+    x.fillStyle = "#111"; x.fillRect(0, 0, w, h);
+    strip.frames.forEach((f, k) => { if (!f) return; const ar = fw/h; let sw = 72, sh = 72/ar; if (sh > 128){ sh = 128; sw = 128*ar; }
+      x.drawImage(f, (72 - sw)/2, (128 - sh)/2, sw, sh, 10 + k*fw, 0, fw + 0.5, h); });
+    const xs = xOf(st), xe = xOf(en);
+    x.fillStyle = "rgba(0,0,0,.62)"; x.fillRect(0, 0, xs, h); x.fillRect(xe, 0, w - xe, h);
+    x.fillStyle = "#ffd54a"; const bw = 4*dpr, hw = 9*dpr;
+    x.fillRect(xs, 0, xe - xs, bw); x.fillRect(xs, h - bw, xe - xs, bw);
+    for (const hx of [xs - hw, xe]){ rr(x, hx, 0, hw, h, 3*dpr); x.fill(); }
+    x.fillStyle = "rgba(20,20,20,.7)"; for (const hx of [xs - hw/2, xe + hw/2]) x.fillRect(hx - dpr, h*0.35, 2*dpr, h*0.3); x.fillStyle = "#ffd54a";
+    const px = xOf(T()); x.fillStyle = "#ffffff"; x.fillRect(px - dpr, 0, 2*dpr, h);
+    read.textContent = `Keeps ${st.toFixed(2)}s → ${en.toFixed(2)}s (${(en - st).toFixed(2)}s) · playhead ${T().toFixed(2)}s`;
+  }
+  cv.addEventListener("pointerdown", e => {
+    const [st, en] = o.get(), r = cv.getBoundingClientRect(), px = (e.clientX - r.left)*cv.width/r.width, tol = 16*cv.width/r.width;
+    dragging = Math.abs(px - xOf(st)) < tol ? "start" : Math.abs(px - xOf(en)) < tol ? "end" : "scrub";
+    try { cv.setPointerCapture(e.pointerId); } catch(_){} v.pause(); move(e);
+  });
+  function move(e){
+    if (!dragging) return; const t = tOf(e.clientX), [st, en] = o.get();
+    if (dragging === "start"){ const ns = clamp(t, 0, en - MIN_LEN); o.set(ns, en, false); v.currentTime = ns; }
+    else if (dragging === "end"){ const ne = clamp(t, st + MIN_LEN, o.full); o.set(st, ne, false); v.currentTime = ne; }
+    else v.currentTime = t;
+    draw();
+  }
+  cv.addEventListener("pointermove", e => { if (dragging) move(e); else { const [st, en] = o.get(), r = cv.getBoundingClientRect(), px = (e.clientX - r.left)*cv.width/r.width, tol = 16*cv.width/r.width; cv.style.cursor = (Math.abs(px - xOf(st)) < tol || Math.abs(px - xOf(en)) < tol) ? "ew-resize" : "pointer"; } });
+  const up = () => { if (!dragging) return; const was = dragging; dragging = null; if (was !== "scrub"){ const [st, en] = o.get(); o.set(st, en, true); } say(""); };
+  cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+  cv.addEventListener("keydown", e => { if (e.key === "ArrowLeft"){ e.preventDefault(); seekTo(T() - (e.shiftKey ? 1 : FRAME)); } else if (e.key === "ArrowRight"){ e.preventDefault(); seekTo(T() + (e.shiftKey ? 1 : FRAME)); } else if (e.key === " "){ e.preventDefault(); playBtn.click(); } });
+  col.append(cv, read, btns, msg); root.append(v, col);
+  if (window.ResizeObserver) new ResizeObserver(() => draw()).observe(cv);
+  return {root, refresh: draw, destroy(){ v.pause(); cancelAnimationFrame(raf); try { URL.revokeObjectURL(v.src); } catch(_){} root.remove(); }};
+}
+function markUnsaved(){ if (!Rt.restoring){ Rt.unsaved = true; saveLabel(); } }
+async function clipPoster(s){
+  const v = s.video; if (!v) return; const was = v.currentTime; v.pause(); await seekV(v, s.start || 0);
+  if (!s.poster){ s.poster = document.createElement("canvas"); s.poster.width = W; s.poster.height = H; }
+  coverVid(s.poster.getContext("2d"), v, 0, 0, W, H); Rt.dirty = true;
+}
+function setClipTrim(s, st, en, final){
+  s.start = st; s.end = en; s.duration = en - st; if (s.raw) buildMotion(s);
+  Rt.dirty = true; drawTimeline();
+  if (final){ stop(); clipPoster(s); seek(Math.min(Rt.T, total())); renderClips(); renderCaps(); markUnsaved(); }
+}
+function toggleClipTrim(s){
+  if (s._trim){ s._trim.destroy(); s._trim = null; renderClips(); return; }
+  SW.scenes.forEach(o => { if (o._trim){ o._trim.destroy(); o._trim = null; } });
+  s._trim = makeTrimmer({file:s.file, full:s.full, get:() => [s.start || 0, s.end != null ? s.end : s.full],
+    set:(a, b2, fin) => setClipTrim(s, a, b2, fin), split: t => splitClip(s, t)});
+  renderClips(); const i = SW.scenes.indexOf(s); stop(); seek(swStart(i) + 0.05);
+}
+async function splitClip(s, t){
+  const i = SW.scenes.indexOf(s); if (i < 0) return "That clip isn't in the list anymore.";
+  if (s.status !== "ready") return "Wait for this clip to finish finding your swipes, then split.";
+  let v2; try { v2 = await openVideo(s.file); } catch(e){ return "Couldn't split this clip. Try again."; }
+  regVideo(v2, () => S.clipVol);
+  const s2 = {kind:"video", name:s.name, file:s.file, video:v2, full:s.full, start:t, end:s.end, duration:s.end - t, raw:s.raw, status:"ready", crop:s.crop};
+  s.end = t; s.duration = t - s.start; buildMotion(s); buildMotion(s2);
+  await seekV(v2, t); s2.poster = document.createElement("canvas"); s2.poster.width = W; s2.poster.height = H; coverVid(s2.poster.getContext("2d"), v2, 0, 0, W, H);
+  SW.scenes.splice(i + 1, 0, s2); stop(); renderClips(); renderCaps(); seek(swStart(i + 1) + 0.05); markUnsaved();
+}
+/* trim editor for single clips (reaction, response, green screen) */
+const PANEL_TRIM = {};
+function mountTrim(slot, getClip, onChange){
+  if (PANEL_TRIM[slot]){ PANEL_TRIM[slot].destroy(); delete PANEL_TRIM[slot]; }
+  const c = getClip(), host = $(slot); if (!host) return; host.innerHTML = "";
+  if (!c || c.kind === "image" || !c.file) return;
+  PANEL_TRIM[slot] = makeTrimmer({file:c.file, full:c.full, get:() => [c.start, c.end], set:(a, b2, fin) => { c.start = a; c.end = b2; onChange(fin); }});
+  host.appendChild(PANEL_TRIM[slot].root);
 }
 
 /* =============== FORMAT: react & respond =============== */
@@ -968,6 +1108,7 @@ async function loadReact(k, file){
     RC[k] = {kind:"video", video:v, file, name:file.name, full:v.duration || 1, start:0, end:v.duration || 1};
     meta.textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s` + (Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02 ? " · will be cropped to fit" : "");
   }
+  mountReactTrim(k);
   stop(); Rt.T = 0; syncUI(); renderCaps(); changed();
 }
 
@@ -1070,6 +1211,7 @@ async function loadFg(file){
   $("fgMeta").textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s`;
   await seekV(v, 0); if (S.keyMode === "color") autoKey();
   if (!keyer.supported()) $("fgMeta").textContent += " · this browser can't remove the background (WebGL is off)";
+  mountFgTrim();
   stop(); Rt.T = 0; syncUI(); renderCaps(); changed();
 }
 
@@ -1806,11 +1948,15 @@ $("vidIn").addEventListener("change", e => { const fs = [...e.target.files]; e.t
 for (const k of ["a","b"]){ const K = k.toUpperCase();
   $("in"+K).addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadReact(k, f); });
   const trim = () => { const c = RC[k]; if (!c) return; let s = parseFloat($("s"+K).value), en = parseFloat($("e"+K).value);
-    if (isNaN(s)) s = 0; if (isNaN(en)) en = c.full; s = clamp(s, 0, c.full - 0.2); en = clamp(en, s + 0.2, c.full); c.start = s; c.end = en; seek(Math.min(Rt.T, total())); renderCaps(); changed(); };
+    if (isNaN(s)) s = 0; if (isNaN(en)) en = c.full; s = clamp(s, 0, c.full - 0.2); en = clamp(en, s + 0.2, c.full); c.start = s; c.end = en; seek(Math.min(Rt.T, total())); renderCaps(); changed(); PANEL_TRIM["trim" + K] && PANEL_TRIM["trim" + K].refresh(); };
   $("s"+K).addEventListener("change", trim); $("e"+K).addEventListener("change", trim); }
 $("fgIn").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadFg(f); });
+function mountReactTrim(k){ const K = k.toUpperCase(); mountTrim("trim" + K, () => RC[k], fin => { $("s" + K).value = RC[k].start.toFixed(1); $("e" + K).value = RC[k].end.toFixed(1); Rt.dirty = true; drawTimeline();
+  if (fin){ seek(Math.min(Rt.T, total())); renderCaps(); changed(); } else mod().sync(false); }); }
+function mountFgTrim(){ mountTrim("trimFg", () => GR.fg, fin => { $("fgS").value = GR.fg.start.toFixed(1); $("fgE").value = GR.fg.end.toFixed(1); Rt.dirty = true; drawTimeline();
+  if (fin){ seek(Math.min(Rt.T, total())); renderCaps(); changed(); } else mod().sync(false); }); }
 const fgTrim = () => { const g = GR.fg; if (!g) return; let s = parseFloat($("fgS").value), en = parseFloat($("fgE").value);
-  if (isNaN(s)) s = 0; if (isNaN(en)) en = g.full; s = clamp(s, 0, g.full - 0.2); en = clamp(en, s + 0.2, g.full); g.start = s; g.end = en; seek(Math.min(Rt.T, total())); renderCaps(); changed(); };
+  if (isNaN(s)) s = 0; if (isNaN(en)) en = g.full; s = clamp(s, 0, g.full - 0.2); en = clamp(en, s + 0.2, g.full); g.start = s; g.end = en; seek(Math.min(Rt.T, total())); renderCaps(); changed(); PANEL_TRIM.trimFg && PANEL_TRIM.trimFg.refresh(); };
 $("fgS").addEventListener("change", fgTrim); $("fgE").addEventListener("change", fgTrim);
 $("autoKey").addEventListener("click", autoKey);
 $("bgImgIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const img = new Image(); img.src = URL.createObjectURL(f);
@@ -1850,7 +1996,7 @@ function saveLabel(msg, warn){
 }
 function gatherMedia(){
   const media = {
-    sw: SW.demo ? [] : SW.scenes.filter(sc => sc.file && sc.status !== "error").map(sc => ({file:sc.file, name:sc.name, raw:sc.raw || null})),
+    sw: SW.demo ? [] : SW.scenes.filter(sc => sc.file && sc.status !== "error").map(sc => ({file:sc.file, name:sc.name, raw:sc.raw || null, start:sc.start || 0, end:sc.end != null ? sc.end : null})),
     rc: {}, gr: {fg: GR.fg ? {file:GR.fg.file, start:GR.fg.start, end:GR.fg.end} : null, bgImg: GR.bgImgFile || null, bgVid: GR.bgVidFile || null},
     images: [...IMAGES.values()].filter(img => img._file).map(img => ({key:img.dataset.name, size:img.dataset.size || "", broll:!!img.dataset.broll, file:img._file}))
   };
@@ -1881,7 +2027,8 @@ async function saveProject(){
 }
 function clearMedia(){
   pauseAll();
-  SW.scenes.forEach(sc => sc.video && unregVideo(sc.video)); swLoadDemo();
+  for (const k of Object.keys(PANEL_TRIM)){ PANEL_TRIM[k].destroy(); delete PANEL_TRIM[k]; }
+  SW.scenes.forEach(sc => { if (sc._trim){ sc._trim.destroy(); sc._trim = null; } sc.video && unregVideo(sc.video); }); swLoadDemo();
   for (const k of ["a","b"]){ if (RC[k] && RC[k].kind === "video") unregVideo(RC[k].video); RC[k] = null; $(k === "a" ? "metaA" : "metaB").textContent = "Sample loaded"; }
   if (GR.fg) unregVideo(GR.fg.video); GR.fg = null; $("fgMeta").textContent = "Sample person loaded";
   if (GR.bgVid) unregVideo(GR.bgVid); GR.bgVid = null; GR.bgVidFile = null; $("bgVidMeta").textContent = "No video yet";
@@ -1903,7 +2050,7 @@ async function restoreMedia(m){
     for (const it of m.sw){
       const f = asFile(it.file, it.name), sc = {kind:"video", name:it.name, status:"loading", duration:1, file:f}; SW.scenes.push(sc);
       let v; try { v = await openVideo(f); } catch(e){ sc.status = "error"; missing++; continue; }
-      sc.video = v; regVideo(v, () => S.clipVol); sc.duration = v.duration || 1; await seekV(v, 0);
+      sc.video = v; regVideo(v, () => S.clipVol); sc.full = v.duration || 1; sc.start = it.start || 0; sc.end = it.end != null ? Math.min(it.end, sc.full) : sc.full; sc.duration = sc.end - sc.start; await seekV(v, sc.start);
       sc.poster = document.createElement("canvas"); sc.poster.width = W; sc.poster.height = H; coverVid(sc.poster.getContext("2d"), v, 0, 0, W, H);
       sc.crop = Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02;
       if (it.raw && it.raw.t && it.raw.t.length){ sc.raw = it.raw; buildMotion(sc); sc.status = "ready"; }
@@ -1911,9 +2058,9 @@ async function restoreMedia(m){
     }
   }
   for (const k of ["a","b"]){ const it = m.rc && m.rc[k]; if (!it) continue;
-    await loadReact(k, asFile(it.file, it.file.name)); if (RC[k]){ RC[k].start = it.start; RC[k].end = it.end; } }
+    await loadReact(k, asFile(it.file, it.file.name)); if (RC[k]){ RC[k].start = it.start; RC[k].end = it.end; } mountReactTrim(k); }
   if (m.gr){
-    if (m.gr.fg){ const key = S.keyCol; await loadFg(asFile(m.gr.fg.file, m.gr.fg.file.name)); S.keyCol = key; if (GR.fg){ GR.fg.start = m.gr.fg.start; GR.fg.end = m.gr.fg.end; } }
+    if (m.gr.fg){ const key = S.keyCol; await loadFg(asFile(m.gr.fg.file, m.gr.fg.file.name)); S.keyCol = key; if (GR.fg){ GR.fg.start = m.gr.fg.start; GR.fg.end = m.gr.fg.end; } mountFgTrim(); }
     if (m.gr.bgImg){ const f = asFile(m.gr.bgImg, m.gr.bgImg.name), img = new Image(); img.src = URL.createObjectURL(f);
       try { await img.decode(); GR.bgImg = img; GR.bgImgFile = f; $("bgImgMeta").textContent = f.name; } catch(e){ missing++; } }
     if (m.gr.bgVid){ const f = asFile(m.gr.bgVid, m.gr.bgVid.name);
