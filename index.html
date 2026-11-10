@@ -125,6 +125,10 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
 .subhead{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
 .subhead:first-of-type{border-top:0;padding-top:0}
 .cap.co{border-left-color:var(--accent)}
+#saveState{white-space:nowrap}
+#saveState.warn{white-space:normal;color:var(--warn)}
+.saved .acts2{display:flex;gap:4px}
+.saved.cur{border-color:var(--accent)}
 .cap.nf{grid-template-columns:repeat(2,minmax(0,1fr));border-left-color:var(--laneB)}
 .cap.nf .full{grid-column:1/-1}
 .cap.nf textarea{min-height:110px;font-size:15px}
@@ -157,7 +161,9 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
   <div class="grid">
     <div class="rail">
       <div class="wiz" id="wiz" hidden>
-        <div class="wizTop"><div><span class="lbl">Format</span><b id="fmtName"></b></div><button class="btn sm" id="changeFmt">Change format</button></div>
+        <div class="wizTop"><div><span class="lbl">Format</span><b id="fmtName"></b></div>
+          <div class="row" style="justify-content:flex-end"><button class="btn sm primary" id="saveBtn" title="Save progress (Cmd/Ctrl+S)">Save progress</button><button class="btn sm" id="changeFmt">Change format</button></div></div>
+        <div class="row" style="flex-wrap:nowrap"><input type="text" id="projName" placeholder="Name this project" aria-label="Project name" style="flex:1"><span class="note" id="saveState" role="status"></span></div>
         <ol class="steps" id="steps"></ol>
       </div>
 
@@ -179,6 +185,11 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
             <b>Green screen</b><span>You in front of a new background: a photo, a video, or words behind you.</span></button>
         </div>
         <p class="note">You can switch formats any time. Your words and settings for each format are kept.</p>
+        <div class="subhead" id="savedWrap" hidden>
+          <div class="row" style="justify-content:space-between"><span class="lbl">Saved projects</span><button class="btn sm" id="newProj">Start a new project</button></div>
+          <ul class="clips" id="savedList"></ul>
+          <p class="note" id="savedNote">Saved in this browser on this device, videos included. Clearing your browser data deletes them.</p>
+        </div>
       </section>
 
       <!-- CLIPS (prompter, scenes) -->
@@ -520,14 +531,15 @@ const S = {
   broll:{prompter:[], scenes:[], react:[], green:[]},
   notifs:{prompter:[], scenes:[], react:[], green:[]},
   seriesOn:false, seriesText:"", seriesCorner:"tl", seriesX:null, seriesY:null,
+  projectId:null, projName:"",
   guides:true
 };
 try { const sv = JSON.parse(localStorage.getItem(STORE) || "null");
   if (sv) for (const k of Object.keys(S)) if (k in sv){
     if (k === "words" || k === "caps" || k === "broll" || k === "notifs") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
 delete S.caps["null"]; delete S.broll["null"]; delete S.notifs["null"];
-function persist(){ try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){} }
-const Rt = {T:0, playing:false, exporting:false, analyzing:0, dirty:true};
+function persist(){ try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){} if (typeof Rt !== "undefined" && !Rt.restoring){ Rt.unsaved = true; saveLabel(); } }
+const Rt = {T:0, playing:false, exporting:false, analyzing:0, dirty:true, unsaved:false, saving:false, restoring:false};
 const caps = () => !S.format ? [] : (S.caps[S.format] || (S.caps[S.format] = []));
 const brolls = () => !S.format ? [] : (S.broll[S.format] || (S.broll[S.format] = []));
 const notifs = () => !S.format ? [] : (S.notifs[S.format] || (S.notifs[S.format] = []));
@@ -822,7 +834,7 @@ async function addClips(files){
   if (SW.demo){ SW.scenes = []; SW.demo = false; }
   stop();
   for (const f of files){
-    const s = {kind:"video", name:f.name, status:"loading", duration:1}; SW.scenes.push(s); renderClips();
+    const s = {kind:"video", name:f.name, status:"loading", duration:1, file:f}; SW.scenes.push(s); renderClips();
     let v; try { v = await openVideo(f); } catch(e){ s.status = "error"; renderClips(); continue; }
     s.video = v; regVideo(v, () => S.clipVol); s.duration = v.duration || 1; await seekV(v, 0);
     s.poster = document.createElement("canvas"); s.poster.width = W; s.poster.height = H; coverVid(s.poster.getContext("2d"), v, 0, 0, W, H);
@@ -949,11 +961,11 @@ async function loadReact(k, file){
   if (file.type.startsWith("image/")){
     const img = new Image(); img.src = URL.createObjectURL(file);
     try { await img.decode(); } catch(e){ meta.textContent = "That image wouldn't open. Try a JPG or PNG."; return; }
-    RC[k] = {kind:"image", img, name:file.name, full:30, start:0, end:3}; meta.textContent = `${file.name} · photo`;
+    RC[k] = {kind:"image", img, file, name:file.name, full:30, start:0, end:3}; meta.textContent = `${file.name} · photo`;
   } else {
     let v; try { v = await openVideo(file); } catch(e){ meta.textContent = "That file wouldn't open. Try an MP4 or MOV from your phone."; RC[k] = null; syncUI(); return; }
     regVideo(v, () => k === "a" ? S.volA : S.volB);
-    RC[k] = {kind:"video", video:v, name:file.name, full:v.duration || 1, start:0, end:v.duration || 1};
+    RC[k] = {kind:"video", video:v, file, name:file.name, full:v.duration || 1, start:0, end:v.duration || 1};
     meta.textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s` + (Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02 ? " · will be cropped to fit" : "");
   }
   stop(); Rt.T = 0; syncUI(); renderCaps(); changed();
@@ -1054,7 +1066,7 @@ function autoKey(){
 async function loadFg(file){
   if (GR.fg) unregVideo(GR.fg.video);
   let v; try { v = await openVideo(file); } catch(e){ $("fgMeta").textContent = "That file wouldn't open. Try an MP4, MOV or WebM."; GR.fg = null; return; }
-  regVideo(v, () => S.fgVol); GR.fg = {video:v, name:file.name, full:v.duration || 1, start:0, end:v.duration || 1};
+  regVideo(v, () => S.fgVol); GR.fg = {video:v, file, name:file.name, full:v.duration || 1, start:0, end:v.duration || 1};
   $("fgMeta").textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s`;
   await seekV(v, 0); if (S.keyMode === "color") autoKey();
   if (!keyer.supported()) $("fgMeta").textContent += " · this browser can't remove the background (WebGL is off)";
@@ -1302,7 +1314,7 @@ $("brIn").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = ""; if (!files.length) return;
   const tot = total(), len = 2.5; let t = Rt.T > tot - 0.5 ? 0 : Rt.T;
   for (const f of files){
-    const key = f.name.replace(/[\[\]]/g, ""); const img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.size = f.size; img.dataset.broll = "1";
+    const key = f.name.replace(/[\[\]]/g, ""); const img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.size = f.size; img.dataset.broll = "1"; img._file = f;
     try { await img.decode(); } catch(err){ continue; }
     IMAGES.set(key.toLowerCase(), img);
     const t0 = Math.round(Math.min(t, Math.max(0, tot - 1))*10)/10, t1 = Math.round(Math.min(tot, t0 + len)*10)/10;
@@ -1496,7 +1508,7 @@ function renderNotifs(){
       li.append(lab(n.kind === "email" ? "Email body" : "Messages (a blank line starts a new bubble)", ta, true)); }
     if (n.open === "image"){ const r2 = document.createElement("div"); r2.className = "row full";
       const up = document.createElement("span"); up.className = "btn sm file"; up.textContent = "Upload screenshot"; const fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; up.appendChild(fi);
-      fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const key = f.name.replace(/[\[\]]/g, ""), img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.broll = "1";
+      fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const key = f.name.replace(/[\[\]]/g, ""), img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.broll = "1"; img._file = f;
         try { await img.decode(); } catch(e){ warn.textContent = "That image wouldn't open. Try a JPG or PNG."; warn.hidden = false; return; }
         IMAGES.set(key.toLowerCase(), img); n.img = key; imgVer++; saved(); rerender(); nfShow(n); };
       const nm = document.createElement("span"); nm.className = "meta"; nm.textContent = n.img ? n.img : "No screenshot yet";
@@ -1781,7 +1793,7 @@ $("imgIn").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = ""; if (!files.length) return; const ta = $("words"), names = [];
   for (const f of files){ let name = f.name.replace(/[\[\]]/g, ""), base = name, n = 2;
     while (IMAGES.has(name.toLowerCase()) && IMAGES.get(name.toLowerCase()).dataset.size != f.size) name = base.replace(/(\.\w+)?$/, `-${n++}$1`);
-    const img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = name; img.dataset.size = f.size;
+    const img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = name; img.dataset.size = f.size; img._file = f;
     try { await img.decode(); } catch(err){ continue; } IMAGES.set(name.toLowerCase(), img); names.push(name); }
   const refd = new Set(ta.value.split("\n").map(l => ((l.trim().match(IMG_RE) || [])[1] || "").toLowerCase()));
   const add = names.filter(nm => !refd.has(nm.toLowerCase()));
@@ -1803,11 +1815,11 @@ $("fgS").addEventListener("change", fgTrim); $("fgE").addEventListener("change",
 $("autoKey").addEventListener("click", autoKey);
 $("bgImgIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const img = new Image(); img.src = URL.createObjectURL(f);
   try { await img.decode(); } catch(err){ $("bgImgMeta").textContent = "That image wouldn't open. Try a JPG or PNG."; return; }
-  GR.bgImg = img; $("bgImgMeta").textContent = f.name; S.bgType = "image"; radio("bgType","image"); changed(); });
+  GR.bgImg = img; GR.bgImgFile = f; $("bgImgMeta").textContent = f.name; S.bgType = "image"; radio("bgType","image"); changed(); });
 $("bgVidIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   if (GR.bgVid) unregVideo(GR.bgVid);
   let v; try { v = await openVideo(f); } catch(err){ $("bgVidMeta").textContent = "That file wouldn't open. Try an MP4 or MOV."; return; }
-  v.loop = true; regVideo(v, () => S.bgVol); GR.bgVid = v; $("bgVidMeta").textContent = `${f.name} · ${(v.duration||0).toFixed(1)}s`; S.bgType = "video"; radio("bgType","video"); changed(); mod().sync(false); });
+  v.loop = true; regVideo(v, () => S.bgVol); GR.bgVid = v; GR.bgVidFile = f; $("bgVidMeta").textContent = `${f.name} · ${(v.duration||0).toFixed(1)}s`; S.bgType = "video"; radio("bgType","video"); changed(); mod().sync(false); });
 $("playBtn").addEventListener("click", () => Rt.playing ? stop() : play());
 $("scrub").addEventListener("input", e => seek(+e.target.value/1000*total()));
 $("exportBtn").addEventListener("click", exportVideo);
@@ -1815,11 +1827,165 @@ $("exportBtn").addEventListener("click", exportVideo);
 function loadFont(){ const f = FONTS[S.font] || FONTS.figtree; if (!document.fonts || !document.fonts.load) return;
   Promise.all([f.w.reg, f.w.semi, f.w.bold, f.em].map(w => document.fonts.load(`${w} 72px "${f.fam}"`))).catch(()=>{}).then(() => { layoutKey = ""; Rt.dirty = true; }); }
 
+/* =============== save progress (this browser, IndexedDB) =============== */
+const DB = (() => {
+  let p = null;
+  const open = () => p || (p = new Promise((res, rej) => {
+    const r = indexedDB.open("stitch-studio", 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore("meta", {keyPath:"id"}); r.result.createObjectStore("data", {keyPath:"id"}); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const run = async (store, mode, fn) => { const db = await open(); return new Promise((res, rej) => {
+    const t = db.transaction(store, mode), req = fn(t.objectStore(store));
+    t.oncomplete = () => res(req ? req.result : undefined); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error("abort")); }); };
+  return {put:(st, rec) => run(st, "readwrite", o => o.put(rec)), get:(st, id) => run(st, "readonly", o => o.get(id)),
+          all:st => run(st, "readonly", o => o.getAll()), del:(st, id) => run(st, "readwrite", o => o.delete(id))};
+})();
+const FMT_NAMES = {prompter:"Teleprompter", scenes:"Scene swipes", react:"React & respond", green:"Green screen"};
+const mb = n => n >= 1048576 ? (n/1048576).toFixed(n >= 104857600 ? 0 : 1) + " MB" : Math.max(1, Math.round(n/1024)) + " KB";
+const clock = d => new Date(d).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+function saveLabel(msg, warn){
+  const el = $("saveState"); if (!el) return;
+  el.className = warn ? "note warn" : "note";
+  el.textContent = msg != null ? msg : Rt.saving ? "Saving…" : Rt.unsaved ? (S.projectId ? "Unsaved changes" : "Not saved yet") : (Rt.savedAt ? `Saved ${clock(Rt.savedAt)}` : "");
+}
+function gatherMedia(){
+  const media = {
+    sw: SW.demo ? [] : SW.scenes.filter(sc => sc.file && sc.status !== "error").map(sc => ({file:sc.file, name:sc.name, raw:sc.raw || null})),
+    rc: {}, gr: {fg: GR.fg ? {file:GR.fg.file, start:GR.fg.start, end:GR.fg.end} : null, bgImg: GR.bgImgFile || null, bgVid: GR.bgVidFile || null},
+    images: [...IMAGES.values()].filter(img => img._file).map(img => ({key:img.dataset.name, size:img.dataset.size || "", broll:!!img.dataset.broll, file:img._file}))
+  };
+  for (const k of ["a","b"]) media.rc[k] = RC[k] && RC[k].file ? {file:RC[k].file, start:RC[k].start, end:RC[k].end} : null;
+  let size = 0; const add = f => { if (f && f.size) size += f.size; };
+  media.sw.forEach(m => add(m.file)); add(media.rc.a && media.rc.a.file); add(media.rc.b && media.rc.b.file);
+  add(media.gr.fg && media.gr.fg.file); add(media.gr.bgImg); add(media.gr.bgVid); media.images.forEach(m => add(m.file));
+  return {media, size};
+}
+async function saveProject(){
+  if (Rt.saving || Rt.exporting || !S.format) return;
+  if (!window.indexedDB){ saveLabel("This browser can't save projects. Try Chrome or Safari.", true); return; }
+  Rt.saving = true; $("saveBtn").disabled = true; saveLabel();
+  try {
+    const id = S.projectId || ("p" + Date.now().toString(36));
+    S.projectId = id; S.projName = ($("projName").value || "").trim() || "Untitled project"; $("projName").value = S.projName;
+    try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){}
+    const {media, size} = gatherMedia(), when = Date.now();
+    try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch(e){}
+    await DB.put("data", {id, state: JSON.parse(JSON.stringify(S)), media});
+    await DB.put("meta", {id, name:S.projName, format:S.format, savedAt:when, size});
+    Rt.unsaved = false; Rt.savedAt = when; Rt.saving = false; saveLabel(); renderSaved();
+  } catch(e){
+    Rt.saving = false;
+    const full = e && (e.name === "QuotaExceededError" || /quota/i.test(e.message || ""));
+    saveLabel(full ? "Not enough space in this browser for these videos. Delete an older save under Change format, then try again." : "Couldn't save. Try again, or export the video so nothing is lost.", true);
+  } finally { $("saveBtn").disabled = false; }
+}
+function clearMedia(){
+  pauseAll();
+  SW.scenes.forEach(sc => sc.video && unregVideo(sc.video)); swLoadDemo();
+  for (const k of ["a","b"]){ if (RC[k] && RC[k].kind === "video") unregVideo(RC[k].video); RC[k] = null; $(k === "a" ? "metaA" : "metaB").textContent = "Sample loaded"; }
+  if (GR.fg) unregVideo(GR.fg.video); GR.fg = null; $("fgMeta").textContent = "Sample person loaded";
+  if (GR.bgVid) unregVideo(GR.bgVid); GR.bgVid = null; GR.bgVidFile = null; $("bgVidMeta").textContent = "No video yet";
+  GR.bgImg = null; GR.bgImgFile = null; $("bgImgMeta").textContent = "No photo yet";
+  for (const img of IMAGES.values()) try { URL.revokeObjectURL(img.src); } catch(e){}
+  IMAGES.clear(); imgVer++; nfCache.clear();
+}
+const asFile = (b, name) => b instanceof File ? b : new File([b], name || "file", {type: (b && b.type) || ""});
+async function restoreMedia(m){
+  if (!m) return 0; let missing = 0;
+  for (const it of m.images || []){
+    if (!it.file){ missing++; continue; }
+    const img = new Image(); img.src = URL.createObjectURL(it.file); img.dataset.name = it.key; img.dataset.size = it.size; if (it.broll) img.dataset.broll = "1"; img._file = asFile(it.file, it.key);
+    try { await img.decode(); IMAGES.set(it.key.toLowerCase(), img); } catch(e){ missing++; }
+  }
+  imgVer++; nfCache.clear();
+  if (m.sw && m.sw.length){
+    SW.scenes = []; SW.demo = false;
+    for (const it of m.sw){
+      const f = asFile(it.file, it.name), sc = {kind:"video", name:it.name, status:"loading", duration:1, file:f}; SW.scenes.push(sc);
+      let v; try { v = await openVideo(f); } catch(e){ sc.status = "error"; missing++; continue; }
+      sc.video = v; regVideo(v, () => S.clipVol); sc.duration = v.duration || 1; await seekV(v, 0);
+      sc.poster = document.createElement("canvas"); sc.poster.width = W; sc.poster.height = H; coverVid(sc.poster.getContext("2d"), v, 0, 0, W, H);
+      sc.crop = Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02;
+      if (it.raw && it.raw.t && it.raw.t.length){ sc.raw = it.raw; buildMotion(sc); sc.status = "ready"; }
+      else { sc.status = "queued"; queue = queue.then(() => analyze(sc)); }
+    }
+  }
+  for (const k of ["a","b"]){ const it = m.rc && m.rc[k]; if (!it) continue;
+    await loadReact(k, asFile(it.file, it.file.name)); if (RC[k]){ RC[k].start = it.start; RC[k].end = it.end; } }
+  if (m.gr){
+    if (m.gr.fg){ const key = S.keyCol; await loadFg(asFile(m.gr.fg.file, m.gr.fg.file.name)); S.keyCol = key; if (GR.fg){ GR.fg.start = m.gr.fg.start; GR.fg.end = m.gr.fg.end; } }
+    if (m.gr.bgImg){ const f = asFile(m.gr.bgImg, m.gr.bgImg.name), img = new Image(); img.src = URL.createObjectURL(f);
+      try { await img.decode(); GR.bgImg = img; GR.bgImgFile = f; $("bgImgMeta").textContent = f.name; } catch(e){ missing++; } }
+    if (m.gr.bgVid){ const f = asFile(m.gr.bgVid, m.gr.bgVid.name);
+      try { const v = await openVideo(f); v.loop = true; regVideo(v, () => S.bgVol); GR.bgVid = v; GR.bgVidFile = f; $("bgVidMeta").textContent = `${f.name} · ${(v.duration||0).toFixed(1)}s`; } catch(e){ missing++; } }
+  }
+  return missing;
+}
+async function openProject(id, keepState){
+  if (Rt.exporting) return;
+  stop(); Rt.restoring = true; saveLabel("Opening your project…");
+  try {
+    const rec = await DB.get("data", id);
+    if (!rec){ if (keepState){ S.projectId = null; persist(); } Rt.restoring = false; saveLabel(keepState ? "" : "That save is gone. It may have been cleared with your browser data.", !keepState); renderSaved(); return; }
+    clearMedia();
+    if (!keepState){ const fresh = rec.state || {}; for (const k of Object.keys(fresh)) S[k] = fresh[k]; }
+    S.projectId = id;
+    const missing = await restoreMedia(rec.media);
+    try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){}
+    $("projName").value = S.projName || "";
+    syncUI(); renderImages(); renderClips(); layoutKey = ""; loadFont();
+    if (S.format && FORMATS[S.format]){ const st = keepState ? S.step : 0; setFormat(S.format); S.step = st; showStep(); } else showStep();
+    const meta = await DB.get("meta", id).catch(() => null);
+    Rt.restoring = false; Rt.unsaved = false; Rt.savedAt = meta ? meta.savedAt : null;
+    saveLabel(missing ? `Opened, but ${missing} file${missing > 1 ? "s" : ""} couldn't be loaded.` : null, !!missing);
+    renderSaved(); Rt.dirty = true;
+  } catch(e){ Rt.restoring = false; saveLabel("Couldn't open that project.", true); }
+}
+function newProject(){
+  stop(); clearMedia();
+  S.projectId = null; S.projName = ""; S.words = {...SAMPLES}; S.caps = {prompter:[], scenes:[], react:[], green:[]};
+  S.broll = {prompter:[], scenes:[], react:[], green:[]}; S.notifs = {prompter:[], scenes:[], react:[], green:[]};
+  S.format = null; S.step = 0; Rt.T = 0; Rt.savedAt = null;
+  persist(); Rt.unsaved = false; $("projName").value = ""; syncUI(); renderImages(); renderClips(); showStep(); renderSaved(); saveLabel(""); Rt.dirty = true;
+}
+async function renderSaved(){
+  const wrap3 = $("savedWrap"), ul = $("savedList"); if (!window.indexedDB){ wrap3.hidden = true; return; }
+  let list = []; try { list = await DB.all("meta"); } catch(e){ wrap3.hidden = true; return; }
+  list.sort((a, b) => b.savedAt - a.savedAt); wrap3.hidden = !list.length && !S.projectId; ul.innerHTML = "";
+  if (!list.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "No saved projects yet. Use Save progress while you work."; ul.appendChild(p); }
+  for (const m of list){
+    const li = document.createElement("li"); li.className = "clip saved" + (m.id === S.projectId ? " cur" : "");
+    const n = document.createElement("span"); n.className = "n"; n.textContent = m.id === S.projectId ? "OPEN" : "";
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = m.name;
+    const acts = document.createElement("span"); acts.className = "acts2";
+    const op = document.createElement("button"); op.className = "btn sm"; op.textContent = m.id === S.projectId ? "Reopen" : "Open"; op.onclick = () => openProject(m.id);
+    const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "Delete"; let armed = false, tmr = null;
+    del.onclick = async () => {
+      if (!armed){ armed = true; del.textContent = "Tap again to delete"; tmr = setTimeout(() => { armed = false; del.textContent = "Delete"; }, 4000); return; }
+      clearTimeout(tmr); try { await DB.del("data", m.id); await DB.del("meta", m.id); } catch(e){}
+      if (m.id === S.projectId){ S.projectId = null; persist(); }
+      renderSaved(); };
+    acts.append(op, del);
+    const st = document.createElement("span"); st.className = "st";
+    st.textContent = `${FMT_NAMES[m.format] || "No format"} · ${new Date(m.savedAt).toLocaleDateString([], {month:"short", day:"numeric"})} ${clock(m.savedAt)} · ${mb(m.size || 0)}`;
+    li.append(n, nm, acts, st); ul.appendChild(li);
+  }
+  try { if (navigator.storage && navigator.storage.estimate){ const e = await navigator.storage.estimate();
+    $("savedNote").textContent = `Saved in this browser on this device, videos included (using ${mb(e.usage || 0)}). Clearing your browser data deletes them.`; } } catch(e){}
+}
+$("saveBtn").addEventListener("click", saveProject);
+$("newProj").addEventListener("click", newProject);
+$("projName").addEventListener("input", e => { S.projName = e.target.value; persist(); });
+document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s"){ e.preventDefault(); saveProject(); } });
+
 /* boot */
 swLoadDemo(); syncUI(); renderPresets(); renderImages(); setBusy(); loadFont();
 if (document.fonts && document.fonts.load) Promise.all(["800 66px Figtree","900 170px Archivo","600 30px Figtree"].map(f => document.fonts.load(f))).catch(()=>{}).then(() => { layoutKey = ""; Rt.dirty = true; });
 if (S.format && FORMATS[S.format]){ const st = S.step; setFormat(S.format); S.step = st; showStep(); }
 else { S.format = null; showStep(); $("legend").innerHTML = ""; }
+$("projName").value = S.projName || "";
+renderSaved();
+if (S.projectId && window.indexedDB) openProject(S.projectId, true);   // bring your saved videos back after a reload
 requestAnimationFrame(tick);
 getDownloads();
 })();

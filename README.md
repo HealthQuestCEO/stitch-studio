@@ -21,6 +21,7 @@ A browser-based maker for 9:16 short videos (Reels, TikTok, YouTube Shorts, Face
 - Phone notification: a text or email banner drops in at any point (with an optional notification sound), opens to a full screen built from your text or your own screenshot when you tap it, then goes picture-in-picture with you or the screen in the corner. The fake screens use generic icons, never a real app's logo
 - Series label: a small corner label that stays on for the whole video (for example READING YOUR LABS · 1). It remembers the last text used and can be dragged
 - Per-layer volume
+- Save progress (button or Cmd/Ctrl+S): saves the whole project, videos and photos included, in this browser. It reopens automatically after a reload, and the Formats screen lists saved projects to open or delete
 - Safe-zone guides (preview only)
 - Export to 1080×1920 with audio (MP4 in recent Chrome and Safari, otherwise WebM)
 
