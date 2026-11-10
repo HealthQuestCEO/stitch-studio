@@ -122,6 +122,10 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
 .monitor{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;gap:12px;align-items:center;min-width:0}
 .screen{background:#000;border-radius:18px;padding:8px;box-shadow:0 1px 0 var(--line),0 18px 40px -20px rgba(0,0,0,.45)}
 #preview{display:block;height:min(68vh,720px);aspect-ratio:9/16;max-width:100%;width:auto;border-radius:12px;background:#000}
+.subhead{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+.subhead:first-of-type{border-top:0;padding-top:0}
+.cap.co{border-left-color:var(--accent)}
+.cap .pin{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:var(--fg);padding-bottom:6px}
 @media (max-width:900px){#preview{height:auto;width:min(100%,380px)}.monitor{position:static}}
 .transport{display:flex;gap:10px;align-items:center;width:min(100%,480px)}
 .transport input{flex:1}
@@ -397,8 +401,29 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
       <!-- CAPTIONS -->
       <section class="step" data-panel="captions" hidden>
         <h2><b class="num"></b><span class="ttl"></span></h2>
-        <p class="lead">Scrub to where you want a caption, then tap a preset. You can edit the text, timing, position, style and animation below.</p>
-        <div class="presets" id="presets"></div>
+        <p class="lead">Add a call-out that sends people to your caption, a series label for the corner, and timed captions. Drag the call-out or the series label in the preview to move them.</p>
+        <div class="subhead">
+          <label class="lbl" for="coPreset">Caption call-out</label>
+          <div class="row" style="flex-wrap:nowrap">
+            <select id="coPreset" style="flex:1"></select>
+            <button class="btn sm primary" id="coAdd">Add call-out</button>
+          </div>
+          <p class="note">Goes on the last 3 seconds and moves if your video gets longer or shorter. Only the arrow moves, with a gentle bounce.</p>
+        </div>
+        <div class="subhead">
+          <span class="lbl">Series label</span>
+          <label class="note" style="color:var(--fg)"><input type="checkbox" id="seriesOn"> Show a series label for the whole video</label>
+          <div class="row" style="flex-wrap:nowrap">
+            <input type="text" id="seriesText" placeholder="READING YOUR LABS · 1" aria-label="Series label text" style="flex:1">
+            <select id="seriesCorner" aria-label="Series label corner" style="width:auto"><option value="tl">Top left</option><option value="tr">Top right</option></select>
+          </div>
+          <div class="row"><button class="btn sm" id="seriesReset">Reset position</button><span class="note">It remembers the last text you used.</span></div>
+        </div>
+        <div class="subhead">
+          <span class="lbl">Timed captions</span>
+          <p class="note">Scrub to where you want a caption, then tap a preset.</p>
+          <div class="presets" id="presets"></div>
+        </div>
         <ul class="caps" id="caps"></ul>
       </section>
 
@@ -475,6 +500,7 @@ const S = {
     green:[{text:"MYTH", t0:0.6, t1:2.4, pos:"bottom", style:"stamp", anim:"pop"}]
   },
   broll:{prompter:[], scenes:[], react:[], green:[]},
+  seriesOn:false, seriesText:"", seriesCorner:"tl", seriesX:null, seriesY:null,
   guides:true
 };
 try { const sv = JSON.parse(localStorage.getItem(STORE) || "null");
@@ -567,7 +593,7 @@ function layoutFor(text){
   layoutCache.set(text, L); return L;
 }
 const startTop = L => SAFE.bottom - FADE - L.lineH;
-function staticTop(L, pos){ if (pos === "top") return SAFE.top + 30; if (pos === "bottom") return SAFE.bottom - 30 - L.height; return (SAFE.top + SAFE.bottom)/2 - L.height/2; }
+function staticTop(L, pos){ if (pos === "top") return SAFE.top + 30 + topReserve(); if (pos === "bottom") return SAFE.bottom - 30 - L.height; return (SAFE.top + SAFE.bottom)/2 - L.height/2; }
 function travelDist(L, end){ const top0 = startTop(L), mid = (SAFE.top + SAFE.bottom)/2;
   const target = end === "hold" ? mid + L.lineH/2 - L.height : SAFE.top - L.height - 20; return Math.max(0, top0 - target); }
 const textCanvas = document.createElement("canvas"); textCanvas.width = W; textCanvas.height = H;
@@ -1024,10 +1050,84 @@ function wrap(ctx, text, maxW){ const words = text.split(/\s+/).filter(Boolean),
   for (const w of words){ const t = cur ? cur + " " + w : w; if (cur && ctx.measureText(t).width > maxW){ lines.push(cur); cur = w; } else cur = t; }
   if (cur) lines.push(cur); return lines; }
 function stampColor(t){ if (/\b(false|myth|wrong|nope|no|fake|busted)\b/i.test(t)) return ["#e5484d","#fff"]; if (/\b(true|fact|yes|right|correct|legit)\b/i.test(t)) return ["#22a06b","#fff"]; return ["#ffd54a","#141414"]; }
-function posY(pos, h){ if (pos === "top") return SAFE.top + 30; if (pos === "bottom") return SAFE.bottom - 30 - h; return (SAFE.top + SAFE.bottom)/2 - h/2; }
-function drawCaption(ctx, cap, T){
-  const age = T - cap.t0, left = cap.t1 - T; if (age < 0 || left < 0 || !cap.text.trim()) return;
-  const anim = cap.anim || "pop", inP = clamp(age/0.22, 0, 1), alpha = clamp(left/0.18, 0, 1);
+function posY(pos, h){ if (pos === "top") return SAFE.top + 30 + topReserve(); if (pos === "bottom") return SAFE.bottom - 30 - h; return (SAFE.top + SAFE.bottom)/2 - h/2; }
+
+/* stamps the viewer can drag in the preview (call-out, series label) register here each preview frame */
+const HIT = []; let drag = null;
+
+/* caption call-out: same stamp look as True/False, pinned to the end, bouncing arrow */
+const CO_LEN = 3;
+const CO_PHRASES = ["Read the caption ↓", "More in the caption ↓", "The answer's in the caption ↓", "True or false? Caption ↓"];
+const coText = t => t.replace(/[\s\u2193\u21E9\u2B07\uFE0F]+$/u, "").trim();
+function capTimes(cp){
+  if (cp.style === "callout" && cp.endPin){ const tot = total(); return [Math.max(0, Math.round((tot - CO_LEN)*10)/10), tot]; }
+  return [cp.t0, cp.t1];
+}
+function calloutBox(ctx, cp){
+  const maxW = SAFE.right - SAFE.left - 40, txt = coText(cp.text) || " ";
+  let fs = 78, lines, tw, arrowW, gap, padX, padY, lh;
+  for (;;){
+    ctx.font = `900 ${fs}px Archivo, "Arial Black", sans-serif`;
+    arrowW = fs*0.62; gap = fs*0.4; padX = fs*0.55; padY = fs*0.42; lh = fs*1.08;
+    const room = maxW - 2*padX - gap - arrowW; lines = wrap(ctx, txt, room); tw = Math.max(...lines.map(l => ctx.measureText(l).width));
+    if ((lines.length <= 2 && tw <= room) || fs <= 46) break; fs -= 4;
+  }
+  const bw = tw + gap + arrowW + 2*padX, bh = lines.length*lh + 2*padY, a = 4*Math.PI/180;
+  // half-size of the tilted stamp, so its corners never cross the safe-zone line
+  const hw = (bw*Math.cos(a) + bh*Math.sin(a))/2 + 8, hh = (bw*Math.sin(a) + bh*Math.cos(a))/2 + 8;
+  const cx = clamp(cp.x ?? (SAFE.left + SAFE.right)/2, SAFE.left + hw, SAFE.right - hw);
+  const cy = clamp(cp.y ?? (SAFE.bottom - 40 - hh), SAFE.top + hh, SAFE.bottom - hh);
+  return {fs, lines, tw, arrowW, gap, padX, padY, lh, bw, bh, hw, hh, cx, cy};
+}
+function drawArrow(ctx, cx, top, w, h){
+  const sw = w*0.3, hh = w*0.62;
+  ctx.beginPath(); ctx.moveTo(cx - sw/2, top); ctx.lineTo(cx + sw/2, top); ctx.lineTo(cx + sw/2, top + h - hh); ctx.lineTo(cx + w/2, top + h - hh);
+  ctx.lineTo(cx, top + h); ctx.lineTo(cx - w/2, top + h - hh); ctx.lineTo(cx - sw/2, top + h - hh); ctx.closePath(); ctx.fill();
+}
+function drawCallout(ctx, cp, T, age, alpha, preview){
+  ctx.save();
+  const b = calloutBox(ctx, cp), inP = ease(clamp(age/0.3, 0, 1)), bw = b.bw, bh = b.bh;
+  ctx.globalAlpha = alpha*inP;
+  ctx.translate(b.cx, b.cy + (1 - inP)*24); ctx.rotate(-4*Math.PI/180);
+  ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10; ctx.fillStyle = "#ffd54a"; rr(ctx, -bw/2, -bh/2, bw, bh, 22); ctx.fill();
+  ctx.shadowColor = "transparent"; ctx.lineWidth = 8; ctx.strokeStyle = "rgba(255,255,255,.85)"; rr(ctx, -bw/2+14, -bh/2+14, bw-28, bh-28, 14); ctx.stroke();
+  ctx.fillStyle = "#141414"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  b.lines.forEach((l, i) => ctx.fillText(l, -bw/2 + b.padX, -bh/2 + b.padY + b.lh*i + b.lh/2 + b.fs*0.04));
+  const bounce = (0.5 - 0.5*Math.cos(T*Math.PI*2*1.2)) * b.fs*0.16, ah = b.fs*0.82;
+  drawArrow(ctx, bw/2 - b.padX - b.arrowW/2, -ah/2 - b.fs*0.08 + bounce, b.arrowW, ah);
+  ctx.restore();
+  if (preview) HIT.push({kind:"callout", ref:cp, cx:b.cx, cy:b.cy, w:2*b.hw, h:2*b.hh});
+}
+
+/* series label: small corner label for the whole video */
+function seriesBox(ctx){
+  const txt = S.seriesText.trim().toUpperCase(), fs = 34, dot = 14, padX = 22, h = 62;
+  ctx.font = `800 ${fs}px Figtree, system-ui, sans-serif`;
+  const w = Math.min(SAFE.right - SAFE.left, ctx.measureText(txt).width + padX*2 + dot + 14);
+  let x = S.seriesCorner === "tr" ? SAFE.right - w : SAFE.left, y = SAFE.top;
+  if (S.format === "react" && S.layout === "pip" && S.corner === S.seriesCorner) y = SAFE.top + Math.round(440*16/9) + 24;
+  if (S.seriesX != null && S.seriesY != null){ x = S.seriesX; y = S.seriesY; }
+  return {txt, fs, dot, padX, w, h, x: clamp(x, SAFE.left, SAFE.right - w), y: clamp(y, SAFE.top, SAFE.bottom - h)};
+}
+const seriesShown = () => S.seriesOn && !!S.seriesText.trim();
+function topReserve(){ if (!seriesShown()) return 0; const b = seriesBox(mctx); return b.y < SAFE.top + 120 ? Math.max(0, b.y + b.h + 16 - (SAFE.top + 30)) : 0; }
+function drawSeries(ctx, preview){
+  if (!seriesShown()) return;
+  const b = seriesBox(ctx); ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 4;
+  ctx.fillStyle = "rgba(14,16,21,.8)"; rr(ctx, b.x, b.y, b.w, b.h, b.h/2); ctx.fill(); ctx.shadowColor = "transparent";
+  ctx.fillStyle = "#ffd54a"; ctx.beginPath(); ctx.arc(b.x + b.padX + b.dot/2, b.y + b.h/2, b.dot/2, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.fillText(b.txt, b.x + b.padX + b.dot + 14, b.y + b.h/2 + 1, b.w - b.padX*2 - b.dot - 14);
+  ctx.restore();
+  if (preview) HIT.push({kind:"series", cx:b.x + b.w/2, cy:b.y + b.h/2, w:b.w, h:b.h});
+}
+
+function drawCaption(ctx, cap, T, preview){
+  const [c0, c1] = capTimes(cap), age = T - c0, left = c1 - T; if (age < 0 || left < 0 || !cap.text.trim()) return;
+  const endsWithVideo = c1 >= total() - 0.05;
+  if (cap.style === "callout") return drawCallout(ctx, cap, T, age, endsWithVideo ? 1 : clamp(left/0.18, 0, 1), preview);
+  const anim = cap.anim || "pop", inP = clamp(age/0.22, 0, 1), alpha = endsWithVideo ? 1 : clamp(left/0.18, 0, 1);
   const maxW = SAFE.right - SAFE.left - 40, cx = (SAFE.left + SAFE.right)/2;
   ctx.save(); ctx.globalAlpha = alpha;
   if (cap.style === "stamp"){
@@ -1077,31 +1177,53 @@ function renderPresets(){
     box.appendChild(b);
   }
 }
-function showCap(cp){ if (Rt.playing) return; const t = Math.min(cp.t0 + 0.6, (cp.t0 + cp.t1)/2); if (Rt.T < cp.t0 + 0.25 || Rt.T > cp.t1 - 0.25) seek(t); else Rt.dirty = true; }
-function capProblem(cp){ const tot = total(); if (!cp.text.trim()) return "Type some text to show this caption."; if (!(cp.t1 > cp.t0)) return "The To time needs to be after the From time.";
-  if (cp.t0 >= tot) return `Starts after the video ends (${tot.toFixed(1)}s). Lower the From time.`; return ""; }
+function showCap(cp){ if (Rt.playing) return; const [a, b] = cp.style ? capTimes(cp) : [cp.t0, cp.t1], t = Math.min(a + 0.6, (a + b)/2); if (Rt.T < a + 0.25 || Rt.T > b - 0.25) seek(t); else Rt.dirty = true; }
+function capProblem(cp){ const tot = total(), [a, b] = capTimes(cp); if (!cp.text.trim()) return "Type some text to show this caption."; if (!(b > a)) return "The To time needs to be after the From time.";
+  if (a >= tot) return `Starts after the video ends (${tot.toFixed(1)}s). Lower the From time.`; return ""; }
 function renderCaps(){
   const ul = $("caps"); ul.innerHTML = ""; const list = caps();
   if (!list.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "No captions yet. Tap a preset above to add one."; ul.appendChild(p); return; }
   list.forEach(cp => {
-    const li = document.createElement("li"); li.className = "cap";
+    const li = document.createElement("li"); li.className = cp.style === "callout" ? "cap co" : "cap"; let pin = null;
     const warn = document.createElement("p"); warn.className = "note warn"; warn.style.gridColumn = "1/-1";
     const check = () => { const m = capProblem(cp); warn.textContent = m; warn.hidden = !m; };
     const edited = () => { persist(); check(); showCap(cp); };
     const tx = document.createElement("input"); tx.type = "text"; tx.value = cp.text; tx.setAttribute("aria-label","Caption text");
     tx.oninput = () => { cp.text = tx.value; edited(); }; tx.onfocus = () => showCap(cp);
-    const num = (lbl, key) => { const l = document.createElement("label"); l.textContent = lbl; const i = document.createElement("input"); i.type = "number"; i.step = "0.1"; i.min = "0"; i.value = cp[key];
-      i.oninput = () => { const v = parseFloat(i.value); if (!isNaN(v)){ cp[key] = v; edited(); } }; l.appendChild(i); return l; };
+    const num = (lbl, key) => { const l = document.createElement("label"); l.textContent = lbl; const i = document.createElement("input"); i.type = "number"; i.step = "0.1"; i.min = "0";
+      i.value = Math.round(capTimes(cp)[key === "t0" ? 0 : 1]*10)/10;
+      i.oninput = () => { const v = parseFloat(i.value); if (isNaN(v)) return;
+        if (cp.endPin){ const [a, b] = capTimes(cp); cp.t0 = a; cp.t1 = b; cp.endPin = false; if (pin) pin.checked = false; }
+        cp[key] = v; edited(); }; l.appendChild(i); return l; };
     const sel = (lbl, key, opts) => { const l = document.createElement("label"); l.textContent = lbl; const s = document.createElement("select");
       for (const [v, t] of opts){ const o = document.createElement("option"); o.value = v; o.textContent = t; s.appendChild(o); } s.value = cp[key] || opts[0][0];
-      s.onchange = () => { cp[key] = s.value; edited(); }; l.appendChild(s); return l; };
+      s.onchange = () => {
+        if (key === "style"){ const [a, b] = capTimes(cp); cp.t0 = a; cp.t1 = b; cp.endPin = false; cp.style = s.value; if (cp.style === "callout" && !cp.anim) cp.anim = "bounce"; persist(); renderCaps(); showCap(cp); return; }
+        cp[key] = s.value; edited(); }; l.appendChild(s); return l; };
     const go = document.createElement("button"); go.className = "btn sm"; go.textContent = "Show"; go.title = "Jump the preview to this caption";
-    go.onclick = () => { stop(); seek(Math.min(cp.t0 + 0.6, (cp.t0 + cp.t1)/2)); };
+    go.onclick = () => { stop(); const [a, b] = capTimes(cp); seek(Math.min(a + 0.6, (a + b)/2)); };
     const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "✕"; del.title = "Delete caption"; del.setAttribute("aria-label","Delete caption");
     del.onclick = () => { S.caps[S.format] = caps().filter(x => x !== cp); renderCaps(); persist(); Rt.dirty = true; };
     const acts = document.createElement("span"); acts.className = "acts"; acts.append(go, del);
-    li.append(tx, num("From (s)","t0"), num("To (s)","t1"), sel("Where","pos",[["top","Top"],["middle","Middle"],["bottom","Bottom"]]),
-      sel("Style","style",[["banner","Banner"],["stamp","Stamp"],["plain","Plain"]]), sel("Animation","anim",[["pop","Pop"],["type","Typewriter"],["words","Word by word"],["slide","Slide up"]]), acts, warn);
+    const STYLES = [["banner","Banner"],["stamp","Stamp"],["plain","Plain"],["callout","Call-out"]];
+    if (cp.style === "callout"){
+      const ph = document.createElement("label"); ph.textContent = "Phrase"; const ps = document.createElement("select");
+      for (const v of [...CO_PHRASES, "__custom"]){ const o = document.createElement("option"); o.value = v; o.textContent = v === "__custom" ? "Custom text" : v; ps.appendChild(o); }
+      ps.value = CO_PHRASES.includes(cp.text) ? cp.text : "__custom";
+      ps.onchange = () => { if (ps.value === "__custom"){ tx.focus(); tx.select(); return; } cp.text = ps.value; tx.value = cp.text; edited(); };
+      tx.addEventListener("input", () => { ps.value = CO_PHRASES.includes(cp.text) ? cp.text : "__custom"; });
+      ph.appendChild(ps);
+      const pl = document.createElement("label"); pl.className = "pin"; pin = document.createElement("input"); pin.type = "checkbox"; pin.checked = !!cp.endPin;
+      pin.onchange = () => { if (!pin.checked){ const [a, b] = capTimes({...cp, endPin:true}); cp.t0 = a; cp.t1 = b; } cp.endPin = pin.checked; persist(); renderCaps(); showCap(cp); };
+      pl.append(pin, document.createTextNode("Stick to the end"));
+      const reset = document.createElement("button"); reset.className = "btn sm"; reset.textContent = "Reset spot"; reset.title = "Put the call-out back in its default spot";
+      reset.onclick = () => { delete cp.x; delete cp.y; persist(); showCap(cp); Rt.dirty = true; };
+      acts.prepend(reset);
+      li.append(tx, num("From (s)","t0"), num("To (s)","t1"), ph, sel("Style","style",STYLES), pl, acts, warn);
+    } else {
+      li.append(tx, num("From (s)","t0"), num("To (s)","t1"), sel("Where","pos",[["top","Top"],["middle","Middle"],["bottom","Bottom"]]),
+        sel("Style","style",STYLES), sel("Animation","anim",[["pop","Pop"],["type","Typewriter"],["words","Word by word"],["slide","Slide up"]]), acts, warn);
+    }
     check(); ul.appendChild(li);
   });
 }
@@ -1179,10 +1301,12 @@ function drawGuides(ctx){
   ctx.save(); ctx.translate((SAFE.right+W)/2, (SAFE.top+SAFE.bottom)/2); ctx.rotate(-Math.PI/2); ctx.fillText("Like / comment / share", 0, 0); ctx.restore(); ctx.restore();
 }
 function render(ctx, T, preview){
+  if (preview) HIT.length = 0;
   ctx.save(); ctx.fillStyle = "#000"; ctx.fillRect(0,0,W,H); mod().render(ctx, T); ctx.restore();
   for (const b of brolls()) drawBroll(ctx, b, T);
-  for (const cp of caps()) drawCaption(ctx, cp, T);
-  if (preview && S.guides) drawGuides(ctx);
+  for (const cp of caps()) drawCaption(ctx, cp, T, preview);
+  drawSeries(ctx, preview);
+  if (preview && (S.guides || drag)) drawGuides(ctx);
 }
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function drawTimeline(){
@@ -1193,9 +1317,44 @@ function drawTimeline(){
       x.save(); x.beginPath(); x.rect(sx(t0), y, sx(t1)-sx(t0), h); x.clip(); x.fillText(label, sx(t0)+12, y+h/2+1); x.restore(); } };
   for (const l of mod().lanes()) lane(l.row ? 40 : 6, 30, l.t0, l.t1, css(l.color), l.label);
   brolls().forEach(b => lane(76, 26, b.t0, b.t1, css("--fg"), b.key));
-  caps().forEach((cp, i) => lane(108 + (i%2)*32, 28, cp.t0, cp.t1, css("--cap"), cp.text));
+  caps().forEach((cp, i) => { const [a, b] = capTimes(cp); lane(108 + (i%2)*32, 28, a, b, css(cp.style === "callout" ? "--accent" : "--cap"), cp.style === "callout" ? coText(cp.text) + " ↓" : cp.text); });
   x.fillStyle = css("--fg"); x.fillRect(sx(Rt.T)-1.5, 0, 3, ch);
 }
+/* drag the call-out / series label in the preview */
+const prevEl = $("preview");
+function canvasPt(e){ const r = prevEl.getBoundingClientRect(); return {x:(e.clientX - r.left)*W/r.width, y:(e.clientY - r.top)*H/r.height}; }
+function hitAt(p){ for (let i = HIT.length - 1; i >= 0; i--){ const h = HIT[i]; if (Math.abs(p.x - h.cx) <= h.w/2 + 12 && Math.abs(p.y - h.cy) <= h.h/2 + 12) return h; } return null; }
+prevEl.addEventListener("touchstart", e => { const t = e.touches[0]; if (t && hitAt(canvasPt(t))) e.preventDefault(); }, {passive:false});
+prevEl.addEventListener("pointerdown", e => {
+  if (Rt.exporting) return; const p = canvasPt(e), h = hitAt(p); if (!h) return;
+  e.preventDefault(); if (Rt.playing) stop();
+  drag = {h, ox:p.x - h.cx, oy:p.y - h.cy}; try { prevEl.setPointerCapture(e.pointerId); } catch(_){}
+  prevEl.style.cursor = "grabbing"; Rt.dirty = true;
+});
+prevEl.addEventListener("pointermove", e => {
+  const p = canvasPt(e);
+  if (!drag){ prevEl.style.cursor = hitAt(p) ? "grab" : ""; return; }
+  const h = drag.h, cx = p.x - drag.ox, cy = p.y - drag.oy;
+  if (h.kind === "callout"){ h.ref.x = Math.round(clamp(cx, SAFE.left + h.w/2, SAFE.right - h.w/2)); h.ref.y = Math.round(clamp(cy, SAFE.top + h.h/2, SAFE.bottom - h.h/2)); }
+  else { S.seriesX = Math.round(clamp(cx - h.w/2, SAFE.left, SAFE.right - h.w)); S.seriesY = Math.round(clamp(cy - h.h/2, SAFE.top, SAFE.bottom - h.h)); }
+  Rt.dirty = true;
+});
+const endDrag = () => { if (!drag) return; drag = null; prevEl.style.cursor = ""; persist(); Rt.dirty = true; };
+prevEl.addEventListener("pointerup", endDrag); prevEl.addEventListener("pointercancel", endDrag);
+
+(() => { const s = $("coPreset");
+  for (const v of [...CO_PHRASES, "__custom"]){ const o = document.createElement("option"); o.value = v; o.textContent = v === "__custom" ? "Custom text" : v; s.appendChild(o); } })();
+$("coAdd").addEventListener("click", () => {
+  if (!S.format) return; const v = $("coPreset").value, custom = v === "__custom";
+  const cp = {text: custom ? "Your text" : v, t0:0, t1:CO_LEN, pos:"bottom", style:"callout", anim:"bounce", endPin:true};
+  caps().push(cp); renderCaps(); persist(); showCap(cp);
+  if (custom){ const rows = $("caps").querySelectorAll(".cap.co input[type=text]"); const el = rows[rows.length - 1]; el && (el.focus(), el.select()); }
+});
+$("seriesOn").addEventListener("change", e => { S.seriesOn = e.target.checked; persist(); Rt.dirty = true; });
+$("seriesText").addEventListener("input", e => { S.seriesText = e.target.value; if (S.seriesText.trim() && !S.seriesOn){ S.seriesOn = true; $("seriesOn").checked = true; } persist(); Rt.dirty = true; });
+$("seriesCorner").addEventListener("change", e => { S.seriesCorner = e.target.value; S.seriesX = S.seriesY = null; persist(); Rt.dirty = true; });
+$("seriesReset").addEventListener("click", () => { S.seriesX = S.seriesY = null; persist(); Rt.dirty = true; });
+
 $("timeline").addEventListener("click", e => { const r = e.currentTarget.getBoundingClientRect(); seek(clamp((e.clientX - r.left - 8*r.width/960)/(r.width*(1-16/960)), 0, 1)*total()); });
 
 /* =============== playback =============== */
@@ -1301,6 +1460,7 @@ function syncUI(){
   for (const id of ["travel","minMove","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim"]) $(id).value = S[id];
   $("font").value = S.font; $("weight").value = S.weight; $("emCol").value = S.emCol; $("credit").value = S.credit;
   $("keyCol").value = S.keyCol; $("bgCol1").value = S.bgCol1; $("bgCol2").value = S.bgCol2;
+  $("seriesOn").checked = !!S.seriesOn; $("seriesText").value = S.seriesText || ""; $("seriesCorner").value = S.seriesCorner || "tl";
   for (const k of ["a","b"]){ const c = RC[k], K = k.toUpperCase(), s = $("s"+K), e = $("e"+K);
     s.disabled = e.disabled = !c; s.value = c ? c.start.toFixed(1) : ""; e.value = c ? c.end.toFixed(1) : ""; s.placeholder = e.placeholder = c ? "" : "Upload first"; }
   const isImg = RC.a && RC.a.kind === "image"; $("sAWrap").hidden = isImg; $("volAWrap").hidden = isImg; $("eALbl").textContent = isImg ? "Show it for (sec)" : "End at (sec)";

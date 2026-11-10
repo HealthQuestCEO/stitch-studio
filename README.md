@@ -17,6 +17,8 @@ A browser-based maker for 9:16 short videos (Reels, TikTok, YouTube Shorts, Face
 - Fonts, emphasis styles (bolder, color, marker, underline), text styles
 - B-roll photos with full screen, card, or top-half layouts and fade, slide, or zoom transitions
 - Timed captions and True/False/Myth/Fact stamps with pop, typewriter, word-by-word, or slide-up animation
+- Caption call-out stamp ("Read the caption ↓" and other presets, or custom text): sits on the last 3 seconds by default, has a gently bouncing arrow, and can be dragged in the preview but stays inside the safe zone
+- Series label: a small corner label that stays on for the whole video (for example READING YOUR LABS · 1). It remembers the last text used and can be dragged
 - Per-layer volume
 - Safe-zone guides (preview only)
 - Export to 1080×1920 with audio (MP4 in recent Chrome and Safari, otherwise WebM)
