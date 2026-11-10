@@ -99,6 +99,8 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
 .clip .n{font:500 12px var(--f-mono);color:var(--accent)}
 .clip .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .clip .st{grid-column:2/-1;font-size:12.5px;color:var(--muted)}
+.clip .wsel{grid-column:2/-1;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--fg)}
+.clip .wsel select{width:auto;max-width:100%;flex:1;min-width:0;padding:5px 8px;font-size:13px}
 .clip .st.ok{color:var(--ok)} .clip .st.warn{color:var(--warn)}
 .clip .ctl{display:flex;gap:4px}
 .imgs{display:flex;flex-wrap:wrap;gap:8px}
@@ -815,7 +817,18 @@ function swDrawScene(ctx, i, lt, dx, dy, still){
   else coverVid(ctx, s.video, 0, 0, W, H);
   ctx.restore();
 }
-function swSectionL(i){ const secs = sectionsOf(S.words[S.format] || ""); return layoutFor(secs[i] || ""); }
+// a clip shows the section picked for it, or by default the section with the same number
+function swSecIdx(i){ const sc = SW.scenes[i]; return sc && sc.sec != null ? sc.sec : i; }
+function swSectionL(i){ const secs = sectionsOf(S.words[S.format] || ""), k = swSecIdx(i); return layoutFor(k >= 0 ? (secs[k] || "") : ""); }
+function secLabel(text, k){
+  const first = text.split("\n").map(l => l.trim()).find(l => l && !IMG_RE.test(l)) || "(only images)";
+  const clean = first.replace(/\*+/g, ""); return `Section ${k + 1}: ${clean.length > 30 ? clean.slice(0, 29) + "…" : clean}`;
+}
+function setClipSection(i, k){
+  // a section lives on one clip: picking it here takes it off whichever clip had it
+  if (k >= 0) SW.scenes.forEach((o, j) => { if (j !== i && swSecIdx(j) === k) o.sec = -1; });
+  SW.scenes[i].sec = k; renderClips(); seek(swStart(i) + 0.05); markUnsaved();
+}
 function swWordsOpts(i, lt, L, dx, dy){
   if (S.format === "scenes") return {top: staticTop(L, S.pos), dx, dy, fade:false};
   return {top: startTop(L) - swScroll(i, lt, L), dx, dy, fade:true};
@@ -890,18 +903,33 @@ function renderClips(){
       st.textContent = parts.join(" · ");
       st.className = "st " + ((!sc && k === 0 && S.sync === "motion") || (!swLast(i) && !sd) ? "warn" : "ok");
     }
-    li.append(n, nm, ctl, st); if (s._trim){ li.appendChild(s._trim.root); s._trim.refresh(); } ul.appendChild(li);
+    li.append(n, nm, ctl, st);
+    if (S.format === "prompter" || S.format === "scenes"){
+      const secs = sectionsOf(S.words[S.format] || ""), cur = swSecIdx(i);
+      const lab = document.createElement("label"); lab.className = "wsel"; lab.textContent = S.format === "prompter" ? "Scrolling words" : "Words";
+      const sel = document.createElement("select"); sel.setAttribute("aria-label", `Words on clip ${i + 1}`);
+      secs.forEach((t, k) => { const o = document.createElement("option"); o.value = k; o.textContent = secLabel(t, k); sel.appendChild(o); });
+      if (cur >= secs.length){ const o = document.createElement("option"); o.value = cur; o.textContent = `Section ${cur + 1} (not written yet)`; sel.appendChild(o); }
+      const none = document.createElement("option"); none.value = -1; none.textContent = "No words on this clip"; sel.appendChild(none);
+      sel.value = String(cur); sel.disabled = Rt.exporting; sel.onchange = () => setClipSection(i, parseInt(sel.value, 10));
+      lab.appendChild(sel); li.appendChild(lab);
+    }
+    if (s._trim){ li.appendChild(s._trim.root); s._trim.refresh(); } ul.appendChild(li);
   });
   updateSecNote();
 }
-function moveClip(i, d){ const j = i+d; if (j < 0 || j >= SW.scenes.length) return; [SW.scenes[i], SW.scenes[j]] = [SW.scenes[j], SW.scenes[i]]; stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
+function moveClip(i, d){ const j = i+d; if (j < 0 || j >= SW.scenes.length) return; SW.scenes.forEach((o, x) => { if (o.sec == null) o.sec = x; }); [SW.scenes[i], SW.scenes[j]] = [SW.scenes[j], SW.scenes[i]]; stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
 function removeClip(i){ const s = SW.scenes.splice(i,1)[0]; if (s && s._trim){ s._trim.destroy(); s._trim = null; } if (s && s.video) unregVideo(s.video); if (!SW.scenes.length) swLoadDemo(); stop(); Rt.T = 0; renderClips(); Rt.dirty = true; }
 function updateSecNote(){
   const el = $("secNote"); if (!el || (S.format !== "prompter" && S.format !== "scenes")) return;
-  const n = sectionsOf(S.words[S.format] || "").length, k = SW.scenes.length;
-  if (n === k){ el.className = "note ok"; el.textContent = `${n} section${n===1?"":"s"} for ${k} clip${k===1?"":"s"}. Matched.`; }
-  else if (n < k){ el.className = "note warn"; el.textContent = `${n} section${n===1?"":"s"} for ${k} clips. Clip${k-n>1?"s":""} ${Array.from({length:k-n},(_,j)=>n+j+1).join(", ")} will have no words.`; }
-  else { el.className = "note warn"; el.textContent = `${n} sections but only ${k} clip${k===1?"":"s"}. The extra section${n-k>1?"s":""} won't show.`; }
+  const n = sectionsOf(S.words[S.format] || "").length, k = SW.scenes.length, map = [], bare = [];
+  for (let i = 0; i < k; i++){ const s2 = swSecIdx(i); if (s2 >= 0 && s2 < n) map.push(`section ${s2 + 1} → clip ${i + 1}`); else bare.push(i + 1); }
+  const unused = []; for (let j = 0; j < n; j++) if (!SW.scenes.some((_, i) => swSecIdx(i) === j)) unused.push(j + 1);
+  const parts = [map.length ? map.join(", ") + "." : "No words are on any clip yet."];
+  if (unused.length) parts.push(`Section${unused.length > 1 ? "s" : ""} ${unused.join(", ")} ${unused.length > 1 ? "aren't" : "isn't"} on a clip.`);
+  if (bare.length && n) parts.push(`Clip${bare.length > 1 ? "s" : ""} ${bare.join(", ")} ${bare.length > 1 ? "have" : "has"} no words.`);
+  parts.push("Pick which section goes on which clip in step 1.");
+  el.className = unused.length ? "note warn" : "note ok"; el.textContent = parts.join(" ");
 }
 
 /* =============== trim & split editor =============== */
@@ -1012,7 +1040,8 @@ async function splitClip(s, t){
   if (s.status !== "ready") return "Wait for this clip to finish finding your swipes, then split.";
   let v2; try { v2 = await openVideo(s.file); } catch(e){ return "Couldn't split this clip. Try again."; }
   regVideo(v2, () => S.clipVol);
-  const s2 = {kind:"video", name:s.name, file:s.file, video:v2, full:s.full, start:t, end:s.end, duration:s.end - t, raw:s.raw, status:"ready", crop:s.crop};
+  SW.scenes.forEach((o, j) => { if (o.sec == null) o.sec = j; });   // freeze current pairs so the split doesn't shift words
+  const s2 = {kind:"video", name:s.name, file:s.file, video:v2, full:s.full, start:t, end:s.end, duration:s.end - t, raw:s.raw, status:"ready", crop:s.crop, sec:-1};
   s.end = t; s.duration = t - s.start; buildMotion(s); buildMotion(s2);
   await seekV(v2, t); s2.poster = document.createElement("canvas"); s2.poster.width = W; s2.poster.height = H; coverVid(s2.poster.getContext("2d"), v2, 0, 0, W, H);
   SW.scenes.splice(i + 1, 0, s2); stop(); renderClips(); renderCaps(); seek(swStart(i + 1) + 0.05); markUnsaved();
@@ -1926,6 +1955,7 @@ for (const id of ["emCol","keyCol","bgCol1","bgCol2"]) $(id).addEventListener("i
 $("credit").addEventListener("input", e => { S.credit = e.target.value; changed(); });
 $("guides").addEventListener("change", e => { S.guides = e.target.checked; Rt.dirty = true; });
 $("words").addEventListener("input", e => { S.words[S.format] = e.target.value; updateSecNote(); updateImgNote(); changed(); });
+$("words").addEventListener("change", () => renderClips());
 $("emBtn").addEventListener("click", () => {
   const ta = $("words"), a = ta.selectionStart, b = ta.selectionEnd; if (a === b){ ta.focus(); return; }
   let s = a, e = b; while (s < e && /\s/.test(ta.value[s])) s++; while (e > s && /\s/.test(ta.value[e-1])) e--;
@@ -1996,7 +2026,7 @@ function saveLabel(msg, warn){
 }
 function gatherMedia(){
   const media = {
-    sw: SW.demo ? [] : SW.scenes.filter(sc => sc.file && sc.status !== "error").map(sc => ({file:sc.file, name:sc.name, raw:sc.raw || null, start:sc.start || 0, end:sc.end != null ? sc.end : null})),
+    sw: SW.demo ? [] : SW.scenes.filter(sc => sc.file && sc.status !== "error").map(sc => ({file:sc.file, name:sc.name, raw:sc.raw || null, start:sc.start || 0, end:sc.end != null ? sc.end : null, sec:sc.sec != null ? sc.sec : null})),
     rc: {}, gr: {fg: GR.fg ? {file:GR.fg.file, start:GR.fg.start, end:GR.fg.end} : null, bgImg: GR.bgImgFile || null, bgVid: GR.bgVidFile || null},
     images: [...IMAGES.values()].filter(img => img._file).map(img => ({key:img.dataset.name, size:img.dataset.size || "", broll:!!img.dataset.broll, file:img._file}))
   };
@@ -2052,7 +2082,7 @@ async function restoreMedia(m){
       let v; try { v = await openVideo(f); } catch(e){ sc.status = "error"; missing++; continue; }
       sc.video = v; regVideo(v, () => S.clipVol); sc.full = v.duration || 1; sc.start = it.start || 0; sc.end = it.end != null ? Math.min(it.end, sc.full) : sc.full; sc.duration = sc.end - sc.start; await seekV(v, sc.start);
       sc.poster = document.createElement("canvas"); sc.poster.width = W; sc.poster.height = H; coverVid(sc.poster.getContext("2d"), v, 0, 0, W, H);
-      sc.crop = Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02;
+      sc.crop = Math.abs(v.videoWidth/v.videoHeight - 9/16) > 0.02; sc.sec = it.sec != null ? it.sec : null;
       if (it.raw && it.raw.t && it.raw.t.length){ sc.raw = it.raw; buildMotion(sc); sc.status = "ready"; }
       else { sc.status = "queued"; queue = queue.then(() => analyze(sc)); }
     }

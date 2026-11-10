@@ -20,6 +20,7 @@ A browser-based maker for 9:16 short videos (Reels, TikTok, YouTube Shorts, Face
 - Caption call-out stamp ("Read the caption ↓" and other presets, or custom text): sits on the last 3 seconds by default, has a gently bouncing arrow, and can be dragged in the preview but stays inside the safe zone
 - Phone notification: a text or email banner drops in at any point (with an optional notification sound), opens to a full screen built from your text or your own screenshot when you tap it, then goes picture-in-picture with you or the screen in the corner. The fake screens use generic icons, never a real app's logo
 - Series label: a small corner label that stays on for the whole video (for example READING YOUR LABS · 1). It remembers the last text used and can be dragged
+- Words per clip (Teleprompter and Scene swipes): each clip picks which `---` section it shows, or none, so the scrolling words can ride on whichever clip actually has the swipes
 - Trim & split: a filmstrip editor on every uploaded clip with draggable start/end handles, a scrub-able mini preview, frame-by-frame nudging and Start here / End here. Teleprompter and Scene swipes clips can also be split into separate clips (for videos made as one long take in Edits)
 - Per-layer volume
 - Save progress (button or Cmd/Ctrl+S): saves the whole project, videos and photos included, in this browser. It reopens automatically after a reload, and the Formats screen lists saved projects to open or delete
