@@ -125,6 +125,12 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
 .subhead{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
 .subhead:first-of-type{border-top:0;padding-top:0}
 .cap.co{border-left-color:var(--accent)}
+.cap.nf{grid-template-columns:repeat(2,minmax(0,1fr));border-left-color:var(--laneB)}
+.cap.nf .full{grid-column:1/-1}
+.cap.nf textarea{min-height:110px;font-size:15px}
+.tm{display:flex;gap:4px;align-items:center}
+.tm input{flex:1}
+.cap .chk{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:var(--fg)}
 .cap .pin{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:var(--fg);padding-bottom:6px}
 @media (max-width:900px){#preview{height:auto;width:min(100%,380px)}.monitor{position:static}}
 .transport{display:flex;gap:10px;align-items:center;width:min(100%,480px)}
@@ -398,6 +404,18 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
         <ul class="caps" id="brList"></ul>
       </section>
 
+      <!-- PHONE NOTIFICATION -->
+      <section class="step" data-panel="notify" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">A text or email banner drops in from the top. When you tap it, it opens to a full screen, then goes picture-in-picture so you can talk through it. Scrub to where it should drop in, then add it.</p>
+        <div class="row" style="flex-wrap:nowrap">
+          <select id="nfKind" aria-label="Notification type" style="flex:1"><option value="message">Text message</option><option value="email">Email</option></select>
+          <button class="btn sm primary" id="nfAdd">Add at playhead</button>
+        </div>
+        <p class="note">This step is optional. Film yourself tapping near the top of the screen, then scrub to your tap and press <b>Now</b> next to "Opens at". The fake screens never show a real app's logo.</p>
+        <ul class="caps" id="nfList"></ul>
+      </section>
+
       <!-- CAPTIONS -->
       <section class="step" data-panel="captions" hidden>
         <h2><b class="num"></b><span class="ttl"></span></h2>
@@ -474,10 +492,10 @@ const ease = q => q < .5 ? 2*q*q : 1 - Math.pow(-2*q+2, 2)/2;
 const IMG_RE = /^\[image:\s*(.+?)\s*\]$/i;
 
 const FORMATS = {
-  prompter:{name:"Teleprompter", steps:[["clips","Upload your swipe clip"],["words","Add your words"],["look","Choose the look"],["sync","Set the timing"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
-  scenes:  {name:"Scene swipes", steps:[["clips","Upload your scene clips"],["words","Words for each scene"],["look","Choose the look"],["place","Placement and entrance"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
-  react:   {name:"React & respond", steps:[["reactA","What you're reacting to"],["reactB","Your response"],["layout","Pick the layout"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
-  green:   {name:"Green screen", steps:[["fg","Upload your green-screen video"],["bg","Choose your background"],["words","Words behind you"],["look","Choose the look"],["broll","Add b-roll"],["captions","Add captions"],["export","Export"]]},
+  prompter:{name:"Teleprompter", steps:[["clips","Upload your swipe clip"],["words","Add your words"],["look","Choose the look"],["sync","Set the timing"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
+  scenes:  {name:"Scene swipes", steps:[["clips","Upload your scene clips"],["words","Words for each scene"],["look","Choose the look"],["place","Placement and entrance"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
+  react:   {name:"React & respond", steps:[["reactA","What you're reacting to"],["reactB","Your response"],["layout","Pick the layout"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
+  green:   {name:"Green screen", steps:[["fg","Upload your green-screen video"],["bg","Choose your background"],["words","Words behind you"],["look","Choose the look"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
 };
 const SAMPLES = {
   prompter:"This is a *sample* script.\nPaste your own words here.\n\nEach line rides up\nwhen your hand swipes up.\n\nPause your hand\nand the words *pause* too.",
@@ -500,17 +518,19 @@ const S = {
     green:[{text:"MYTH", t0:0.6, t1:2.4, pos:"bottom", style:"stamp", anim:"pop"}]
   },
   broll:{prompter:[], scenes:[], react:[], green:[]},
+  notifs:{prompter:[], scenes:[], react:[], green:[]},
   seriesOn:false, seriesText:"", seriesCorner:"tl", seriesX:null, seriesY:null,
   guides:true
 };
 try { const sv = JSON.parse(localStorage.getItem(STORE) || "null");
   if (sv) for (const k of Object.keys(S)) if (k in sv){
-    if (k === "words" || k === "caps" || k === "broll") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
-delete S.caps["null"]; delete S.broll["null"];
+    if (k === "words" || k === "caps" || k === "broll" || k === "notifs") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
+delete S.caps["null"]; delete S.broll["null"]; delete S.notifs["null"];
 function persist(){ try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){} }
 const Rt = {T:0, playing:false, exporting:false, analyzing:0, dirty:true};
 const caps = () => !S.format ? [] : (S.caps[S.format] || (S.caps[S.format] = []));
 const brolls = () => !S.format ? [] : (S.broll[S.format] || (S.broll[S.format] = []));
+const notifs = () => !S.format ? [] : (S.notifs[S.format] || (S.notifs[S.format] = []));
 
 /* =============== media + audio =============== */
 let actx = null, recDest = null;
@@ -1291,6 +1311,221 @@ $("brIn").addEventListener("change", async e => {
   imgVer++; renderBroll(); renderImages(); persist(); const lastB = brolls()[brolls().length-1]; if (lastB) showCap(brolls()[brolls().length - files.length] || lastB);
 });
 
+/* =============== phone notifications =============== */
+const NF_IN = 0.4, NF_OPEN = 0.45, NF_PIP = 0.5, NF_OUT = 0.4, NF_FONT = "Figtree, system-ui, -apple-system, sans-serif";
+const NF_DEFAULTS = {
+  message:{app:"Messages", from:"Sarah", subject:"", text:"Wait… is this actually true?", body:"Wait… is this actually true?\n\nI keep seeing it everywhere."},
+  email:{app:"Mail", from:"Patient Portal", subject:"Your lab results are ready", text:"Your recent results are now available to view.", body:"Hi,\n\nYour recent lab results are now available. Log in to your portal to view them.\n\nThank you"}
+};
+const lerpR = (a, b, k) => ({x:a.x + (b.x-a.x)*k, y:a.y + (b.y-a.y)*k, w:a.w + (b.w-a.w)*k, h:a.h + (b.h-a.h)*k});
+const FULL = {x:0, y:0, w:W, h:H};
+function ellipsize(ctx, lines, maxLines, maxW){
+  if (lines.length <= maxLines) return lines;
+  const out = lines.slice(0, maxLines); let last = out[maxLines-1] + "…";
+  while (ctx.measureText(last).width > maxW && last.length > 2) last = last.slice(0, -2) + "…";
+  out[maxLines-1] = last; return out;
+}
+function nfLayout(n){
+  const pad = 28, icon = 88, x0 = pad + icon + 24, w = SAFE.right - SAFE.left, tw = w - x0 - pad;
+  mctx.font = `500 32px ${NF_FONT}`;
+  const lines = ellipsize(mctx, wrap(mctx, (n.text || "").trim(), tw), n.kind === "email" ? 1 : 2, tw);
+  const h = pad + 30 + 14 + 42 + (n.kind === "email" && n.subject ? 40 : 0) + lines.length*40 + pad - 6;
+  return {pad, icon, x0, w, tw, lines, h, x:SAFE.left, y:SAFE.top + 12};
+}
+function nfIcon(ctx, kind, x, y, s){
+  ctx.save(); const g = ctx.createLinearGradient(x, y, x, y + s);
+  if (kind === "email"){ g.addColorStop(0, "#5aa8ff"); g.addColorStop(1, "#1e6ff0"); } else { g.addColorStop(0, "#6ee07c"); g.addColorStop(1, "#2bb84a"); }
+  ctx.fillStyle = g; rr(ctx, x, y, s, s, s*0.24); ctx.fill(); ctx.fillStyle = "#fff";
+  if (kind === "email"){
+    const ex = x + s*0.18, ey = y + s*0.28, ew = s*0.64, eh = s*0.44; rr(ctx, ex, ey, ew, eh, s*0.06); ctx.fill();
+    ctx.strokeStyle = "#1e6ff0"; ctx.lineWidth = s*0.05; ctx.beginPath(); ctx.moveTo(ex + s*0.03, ey + s*0.04); ctx.lineTo(ex + ew/2, ey + eh*0.58); ctx.lineTo(ex + ew - s*0.03, ey + s*0.04); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.ellipse(x + s/2, y + s*0.47, s*0.33, s*0.27, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x + s*0.3, y + s*0.62); ctx.lineTo(x + s*0.22, y + s*0.8); ctx.lineTo(x + s*0.44, y + s*0.68); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawBanner(ctx, n, L, x, y, alpha, withBg){
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  if (withBg){ ctx.save(); ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 12; ctx.fillStyle = "rgba(244,244,247,.97)"; rr(ctx, x, y, L.w, L.h, 36); ctx.fill(); ctx.restore(); }
+  nfIcon(ctx, n.kind, x + L.pad, y + L.pad, L.icon);
+  const tx = x + L.x0; let ty = y + L.pad + 14; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.fillStyle = "#6e6e73"; ctx.font = `600 25px ${NF_FONT}`; ctx.fillText((n.app || "").toUpperCase(), tx, ty, L.tw - 90);
+  ctx.textAlign = "right"; ctx.fillText("now", x + L.w - L.pad, ty); ctx.textAlign = "left";
+  ty += 14 + 30; ctx.fillStyle = "#111114"; ctx.font = `700 36px ${NF_FONT}`; ctx.fillText(n.from || "", tx, ty, L.tw);
+  if (n.kind === "email" && n.subject){ ty += 40; ctx.font = `600 32px ${NF_FONT}`; ctx.fillText(n.subject, tx, ty, L.tw); }
+  ctx.fillStyle = "#3a3a3c"; ctx.font = `500 32px ${NF_FONT}`;
+  for (const l of L.lines){ ty += 40; ctx.fillText(l, tx, ty); }
+  ctx.restore();
+}
+const nfCache = new Map();
+function nfScreen(n){
+  const img = n.img ? IMAGES.get(n.img.toLowerCase()) : null;
+  const key = JSON.stringify([n.kind, n.open, n.app, n.from, n.subject, n.body, n.img, !!img]);
+  if (nfCache.has(key)) return nfCache.get(key);
+  if (nfCache.size > 12) nfCache.clear();
+  const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d");
+  const L = SAFE.left + 10, R = SAFE.right - 10, maxW = R - L;
+  x.textBaseline = "middle"; x.textAlign = "left";
+  if (n.open === "image"){
+    x.fillStyle = "#f2f2f7"; x.fillRect(0, 0, W, H);
+    if (img){ const sc = W/img.naturalWidth, h = img.naturalHeight*sc; x.drawImage(img, 0, h < H ? (H - h)/2 : 0, W, h); }
+    else { x.fillStyle = "#3a3a3c"; x.font = `600 40px ${NF_FONT}`; x.textAlign = "center"; x.fillText(n.img ? `Add ${n.img} again` : "Upload your screenshot", W/2, H/2, maxW); }
+  } else if (n.kind === "email"){
+    x.fillStyle = "#ffffff"; x.fillRect(0, 0, W, H);
+    let y = SAFE.top + 40; x.fillStyle = "#1e6ff0"; x.font = `600 38px ${NF_FONT}`; x.fillText("‹ Inbox", L, y);
+    y += 80; x.fillStyle = "#111114"; x.font = `800 54px ${NF_FONT}`;
+    for (const l of wrap(x, n.subject || "(no subject)", maxW).slice(0, 3)){ x.fillText(l, L, y); y += 64; }
+    y += 24; const av = 42, name = (n.from || "?").trim();
+    x.fillStyle = "#8e7cf0"; x.beginPath(); x.arc(L + av, y + av, av, 0, Math.PI*2); x.fill();
+    x.fillStyle = "#fff"; x.font = `700 38px ${NF_FONT}`; x.textAlign = "center"; x.fillText(name[0].toUpperCase(), L + av, y + av + 2); x.textAlign = "left";
+    x.fillStyle = "#111114"; x.font = `700 34px ${NF_FONT}`; x.fillText(name, L + av*2 + 22, y + av - 18, maxW - av*2 - 140);
+    x.fillStyle = "#6e6e73"; x.font = `500 28px ${NF_FONT}`; x.fillText("to me", L + av*2 + 22, y + av + 22);
+    x.textAlign = "right"; x.fillText("now", R, y + av - 18); x.textAlign = "left";
+    y += av*2 + 34; x.fillStyle = "#e5e5ea"; x.fillRect(L, y, maxW, 2); y += 56;
+    x.fillStyle = "#222226"; x.font = `500 42px ${NF_FONT}`;
+    for (const para of (n.body || "").split("\n")){
+      if (!para.trim()){ y += 30; continue; }
+      for (const l of wrap(x, para, maxW)){ if (y > SAFE.bottom - 30) break; x.fillText(l, L, y); y += 58; }
+    }
+  } else {
+    x.fillStyle = "#ffffff"; x.fillRect(0, 0, W, H);
+    const hb = SAFE.top + 190; x.fillStyle = "#f6f6f8"; x.fillRect(0, 0, W, hb); x.fillStyle = "#e5e5ea"; x.fillRect(0, hb, W, 2);
+    x.fillStyle = "#1e6ff0"; x.font = `400 76px ${NF_FONT}`; x.fillText("‹", L, SAFE.top + 60);
+    const name = (n.from || "?").trim(), g = x.createLinearGradient(0, SAFE.top + 6, 0, SAFE.top + 106); g.addColorStop(0, "#b4b4bb"); g.addColorStop(1, "#8e8e95");
+    x.fillStyle = g; x.beginPath(); x.arc(W/2, SAFE.top + 56, 50, 0, Math.PI*2); x.fill();
+    x.fillStyle = "#fff"; x.font = `600 44px ${NF_FONT}`; x.textAlign = "center"; x.fillText(name[0].toUpperCase(), W/2, SAFE.top + 58);
+    x.fillStyle = "#111114"; x.font = `600 30px ${NF_FONT}`; x.fillText(name, W/2, SAFE.top + 146, maxW);
+    x.fillStyle = "#8e8e93"; x.font = `500 26px ${NF_FONT}`; x.fillText("Today · now", W/2, hb + 50); x.textAlign = "left";
+    let y = hb + 100; x.font = `500 46px ${NF_FONT}`;
+    for (const para of (n.body || "").split(/\n\s*\n/)){
+      const lines = wrap(x, para.replace(/\n/g, " ").trim(), 690); if (!lines.length) continue;
+      const bw = Math.max(...lines.map(l => x.measureText(l).width)) + 64, bh = lines.length*60 + 40;
+      if (y + bh > SAFE.bottom) break;
+      x.fillStyle = "#e9e9eb"; rr(x, L, y, bw, bh, 44); x.fill();
+      x.fillStyle = "#111114"; lines.forEach((l, i) => x.fillText(l, L + 32, y + 20 + 30 + i*60)); y += bh + 18;
+    }
+  }
+  nfCache.set(key, c); return c;
+}
+function nfCorner(n){ const w = 400, h = Math.round(w*16/9); return {x: n.corner === "tr" ? SAFE.right - w : SAFE.left, y: SAFE.top, w, h}; }
+function nfOk(n){ const opens = n.open !== "none" && n.tOpen > n.t0 && n.tOpen < n.t1; return {opens, pip: opens && n.pip && n.tPip > n.tOpen && n.tPip < n.t1}; }
+function nState(n, T){
+  if (T < n.t0 || T > n.t1) return null;
+  const L = nfLayout(n), br = {x:L.x, y:L.y, w:L.w, h:L.h}, {opens, pip} = nfOk(n);
+  if (!opens || T < n.tOpen){
+    const k = Math.min(ease(clamp((T - n.t0)/NF_IN, 0, 1)), opens ? 1 : ease(clamp((n.t1 - T)/NF_OUT, 0, 1)));
+    return {L, banner:{x:br.x, y:br.y - (1 - k)*(br.y + br.h + 40)}};
+  }
+  const ko = ease(clamp((T - n.tOpen)/NF_OPEN, 0, 1)), kEnd = ease(clamp((n.t1 - T)/NF_OUT, 0, 1));
+  const st = {L, screen:{rect:lerpR(br, FULL, ko), r:36*(1 - ko), alpha:1, bannerAlpha:1 - clamp(ko*2, 0, 1)}, base:null};
+  if (pip && T >= n.tPip){
+    const kp = ease(clamp((T - n.tPip)/NF_PIP, 0, 1)), box = nfCorner(n);
+    if (n.who === "screen"){ st.screen.rect = lerpR(FULL, box, kp); st.screen.r = 28*kp; st.screen.alpha = kEnd; st.screen.framed = kp; }
+    else {
+      const small = {x:box.x + box.w*0.35, y:box.y + box.h*0.35, w:box.w*0.3, h:box.h*0.3};
+      st.base = {rect: kEnd < 1 ? lerpR(box, FULL, 1 - kEnd) : lerpR(small, box, kp), alpha: kEnd < 1 ? 1 : kp, r: 28*kEnd};
+    }
+  } else if (kEnd < 1){ st.screen.alpha = kEnd; st.screen.rect = {...st.screen.rect, y: st.screen.rect.y - (1 - kEnd)*120}; }
+  return st;
+}
+function drawFramed(ctx, src, rect, r, framed, alpha){
+  if (alpha <= 0 || rect.w < 2) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  if (framed > 0){ ctx.save(); ctx.shadowColor = `rgba(0,0,0,${0.5*framed})`; ctx.shadowBlur = 36; ctx.shadowOffsetY = 10; ctx.fillStyle = "#fff";
+    rr(ctx, rect.x - 6*framed, rect.y - 6*framed, rect.w + 12*framed, rect.h + 12*framed, r + 6*framed); ctx.fill(); ctx.restore(); }
+  rr(ctx, rect.x, rect.y, rect.w, rect.h, r); ctx.clip();
+  const s = rect.w/W; ctx.drawImage(src, rect.x, rect.y, W*s, H*s);
+  ctx.restore();
+}
+const baseCanvas = document.createElement("canvas"); baseCanvas.width = W; baseCanvas.height = H; const bctx = baseCanvas.getContext("2d");
+function nfActive(T){ for (const n of notifs()){ const st = nState(n, T); if (st) return [n, st]; } return null; }
+function drawNotifTop(ctx, n, st){
+  if (st.banner){ drawBanner(ctx, n, st.L, st.banner.x, st.banner.y, 1, true); return; }
+  const sc = st.screen; drawFramed(ctx, nfScreen(n), sc.rect, sc.r, sc.framed || 0, sc.alpha);
+  if (sc.bannerAlpha > 0) drawBanner(ctx, n, st.L, sc.rect.x, sc.rect.y, sc.bannerAlpha*sc.alpha, false);
+}
+function ding(){
+  if (!actx) return; const t = actx.currentTime;
+  for (const [f, d] of [[1318.5, 0], [1760, 0.1]]){
+    const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.22, t + d + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.38);
+    o.connect(g); g.connect(actx.destination); if (recDest) g.connect(recDest); o.start(t + d); o.stop(t + d + 0.42);
+  }
+}
+function nfSounds(prev, T){ for (const n of notifs()) if (n.ding && prev < n.t0 && T >= n.t0) ding(); }
+function nfProblem(n){
+  const tot = total();
+  if (!(n.t1 > n.t0)) return "Ends needs to be after Appears.";
+  if (n.t0 >= tot) return `Appears after the video ends (${tot.toFixed(1)}s).`;
+  if (n.open !== "none" && !(n.tOpen > n.t0 && n.tOpen < n.t1)) return "Opens at needs to be between Appears and Ends.";
+  if (n.open !== "none" && n.pip && !(n.tPip > n.tOpen && n.tPip < n.t1)) return "Picture-in-picture needs to start between Opens at and Ends.";
+  if (n.open === "image" && !(n.img && IMAGES.has(n.img.toLowerCase()))) return n.img ? `Add ${n.img} again. Screenshots aren't saved between visits.` : "Upload the screenshot it opens to.";
+  return "";
+}
+function nfShow(n, t){ if (Rt.playing) stop(); seek(t ?? (n.open !== "none" ? Math.min(n.t1 - 0.1, n.tOpen + 0.7) : n.t0 + 0.6)); }
+function renderNotifs(){
+  const ul = $("nfList"); if (!ul) return; ul.innerHTML = ""; const list = notifs();
+  if (!list.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "No notifications yet."; ul.appendChild(p); return; }
+  list.forEach(n => {
+    const li = document.createElement("li"); li.className = "cap nf";
+    const warn = document.createElement("p"); warn.className = "note warn full";
+    const check = () => { const m = nfProblem(n); warn.textContent = m; warn.hidden = !m; };
+    const saved = () => { nfCache.clear(); persist(); check(); Rt.dirty = true; };
+    const lab = (txt, el, full) => { const l = document.createElement("label"); if (full) l.className = "full"; l.append(txt, el); return l; };
+    const text = (txt, key, full) => { const i = document.createElement("input"); i.type = "text"; i.value = n[key] || ""; i.oninput = () => { n[key] = i.value; saved(); }; i.onfocus = () => { if (!nState(n, Rt.T)) nfShow(n); }; return lab(txt, i, full); };
+    const select = (txt, key, opts, full, after) => { const s2 = document.createElement("select"); for (const [v, t] of opts){ const o = document.createElement("option"); o.value = v; o.textContent = t; s2.appendChild(o); }
+      s2.value = n[key]; s2.onchange = () => { n[key] = s2.value; saved(); after && after(); }; return lab(txt, s2, full); };
+    const time = (txt, key) => { const wrap2 = document.createElement("span"); wrap2.className = "tm";
+      const i = document.createElement("input"); i.type = "number"; i.step = "0.1"; i.min = "0"; i.value = Math.round(n[key]*10)/10;
+      i.oninput = () => { const v = parseFloat(i.value); if (!isNaN(v)){ n[key] = v; saved(); nfShow(n, Math.min(v + 0.05, total())); } };
+      const now = document.createElement("button"); now.className = "btn sm"; now.textContent = "Now"; now.title = `Set ${txt} to the playhead`;
+      now.onclick = () => { n[key] = Math.round(Rt.T*10)/10; i.value = n[key]; saved(); };
+      wrap2.append(i, now); return lab(txt, wrap2); };
+    const box = (txt, key, after) => { const l = document.createElement("label"); l.className = "chk"; const c = document.createElement("input"); c.type = "checkbox"; c.checked = !!n[key];
+      c.onchange = () => { n[key] = c.checked; saved(); after && after(); }; l.append(c, txt); return l; };
+    const rerender = () => { renderNotifs(); Rt.dirty = true; };
+    li.append(
+      select("Type", "kind", [["message","Text message"],["email","Email"]], false, () => { const d = NF_DEFAULTS[n.kind], o = NF_DEFAULTS[n.kind === "email" ? "message" : "email"]; if (!n.app || n.app === o.app) n.app = d.app; if (n.kind === "email" && !n.subject) n.subject = d.subject; saved(); rerender(); }),
+      text("App name", "app"), text("From", "from", true));
+    if (n.kind === "email") li.append(text("Subject", "subject", true));
+    li.append(text("Banner text", "text", true),
+      select("When you tap it, it opens to", "open", [["text","A screen built from my text"],["image","My screenshot"],["none","Nothing (banner only)"]], true, rerender));
+    if (n.open === "text"){ const ta = document.createElement("textarea"); ta.value = n.body || ""; ta.oninput = () => { n.body = ta.value; saved(); nfShow(n); };
+      li.append(lab(n.kind === "email" ? "Email body" : "Messages (a blank line starts a new bubble)", ta, true)); }
+    if (n.open === "image"){ const r2 = document.createElement("div"); r2.className = "row full";
+      const up = document.createElement("span"); up.className = "btn sm file"; up.textContent = "Upload screenshot"; const fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; up.appendChild(fi);
+      fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const key = f.name.replace(/[\[\]]/g, ""), img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.broll = "1";
+        try { await img.decode(); } catch(e){ warn.textContent = "That image wouldn't open. Try a JPG or PNG."; warn.hidden = false; return; }
+        IMAGES.set(key.toLowerCase(), img); n.img = key; imgVer++; saved(); rerender(); nfShow(n); };
+      const nm = document.createElement("span"); nm.className = "meta"; nm.textContent = n.img ? n.img : "No screenshot yet";
+      r2.append(up, nm); li.append(r2); }
+    li.append(time("Appears", "t0"), time("Ends", "t1"));
+    if (n.open !== "none"){
+      li.append(time("Opens at (your tap)", "tOpen"));
+      li.append(box("Then go picture-in-picture", "pip", rerender));
+      if (n.pip){ li.append(time("Picture-in-picture at", "tPip"),
+        select("In the corner", "who", [["me","Me (the screen fills the frame)"],["screen","The screen (I fill the frame)"]]),
+        select("Corner", "corner", [["tl","Top left"],["tr","Top right"]])); }
+    }
+    li.append(box("Notification sound", "ding"));
+    const acts = document.createElement("span"); acts.className = "acts";
+    const go = document.createElement("button"); go.className = "btn sm"; go.textContent = "Show"; go.onclick = () => nfShow(n);
+    const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "✕"; del.title = "Remove notification"; del.setAttribute("aria-label", "Remove notification");
+    del.onclick = () => { S.notifs[S.format] = notifs().filter(x => x !== n); persist(); renderNotifs(); Rt.dirty = true; };
+    acts.append(go, del); li.append(acts, warn); check(); ul.appendChild(li);
+  });
+}
+$("nfAdd").addEventListener("click", () => {
+  if (!S.format) return; const kind = $("nfKind").value, tot = total();
+  let t0 = Rt.T > tot - 1 ? Math.max(0, tot - 8) : Rt.T; t0 = Math.round(t0*10)/10;
+  const t1 = Math.round(Math.min(tot, t0 + 8)*10)/10, d = t1 - t0;
+  const n = {kind, ...NF_DEFAULTS[kind], open:"text", img:"", t0, t1, tOpen: Math.round((t0 + Math.min(2, d*0.3))*10)/10, pip:true,
+    tPip: Math.round((t0 + Math.min(3.5, d*0.55))*10)/10, who:"me", corner:"tl", ding:true};
+  notifs().push(n); persist(); renderNotifs(); nfShow(n, t0 + 0.6);
+});
+
 /* =============== render + timeline =============== */
 function drawGuides(ctx){
   ctx.save(); ctx.fillStyle = "rgba(214,57,59,.2)";
@@ -1302,10 +1537,21 @@ function drawGuides(ctx){
 }
 function render(ctx, T, preview){
   if (preview) HIT.length = 0;
-  ctx.save(); ctx.fillStyle = "#000"; ctx.fillRect(0,0,W,H); mod().render(ctx, T); ctx.restore();
-  for (const b of brolls()) drawBroll(ctx, b, T);
+  const nf = nfActive(T);
+  if (nf && nf[1].base){
+    // "me in the corner": draw the clip once off-screen, show the opened screen full, then the clip in the corner box
+    bctx.save(); bctx.fillStyle = "#000"; bctx.fillRect(0,0,W,H); mod().render(bctx, T); bctx.restore();
+    for (const b of brolls()) drawBroll(bctx, b, T);
+    ctx.drawImage(baseCanvas, 0, 0); drawNotifTop(ctx, nf[0], nf[1]);
+    const bs = nf[1].base; drawFramed(ctx, baseCanvas, bs.rect, bs.r, bs.r > 0 ? 1 : 0, bs.alpha);
+  } else {
+    ctx.save(); ctx.fillStyle = "#000"; ctx.fillRect(0,0,W,H); mod().render(ctx, T); ctx.restore();
+    for (const b of brolls()) drawBroll(ctx, b, T);
+    if (nf && !nf[1].banner) drawNotifTop(ctx, nf[0], nf[1]);
+  }
   for (const cp of caps()) drawCaption(ctx, cp, T, preview);
   drawSeries(ctx, preview);
+  if (nf && nf[1].banner) drawNotifTop(ctx, nf[0], nf[1]);   // the banner sits on top, like a real phone
   if (preview && (S.guides || drag)) drawGuides(ctx);
 }
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
@@ -1317,6 +1563,7 @@ function drawTimeline(){
       x.save(); x.beginPath(); x.rect(sx(t0), y, sx(t1)-sx(t0), h); x.clip(); x.fillText(label, sx(t0)+12, y+h/2+1); x.restore(); } };
   for (const l of mod().lanes()) lane(l.row ? 40 : 6, 30, l.t0, l.t1, css(l.color), l.label);
   brolls().forEach(b => lane(76, 26, b.t0, b.t1, css("--fg"), b.key));
+  notifs().forEach(n => lane(76, 26, n.t0, n.t1, css("--laneB"), (n.kind === "email" ? "Email · " : "Text · ") + (n.from || "")));
   caps().forEach((cp, i) => { const [a, b] = capTimes(cp); lane(108 + (i%2)*32, 28, a, b, css(cp.style === "callout" ? "--accent" : "--cap"), cp.style === "callout" ? coText(cp.text) + " ↓" : cp.text); });
   x.fillStyle = css("--fg"); x.fillRect(sx(Rt.T)-1.5, 0, 3, ch);
 }
@@ -1366,7 +1613,7 @@ function seek(t){ Rt.playing = false; pauseAll(); $("playBtn").textContent = "Pl
 let last = performance.now();
 function tick(now){
   const dt = Math.min(0.1, (now-last)/1000); last = now;
-  if (Rt.playing && !Rt.exporting){ Rt.T += dt; if (Rt.T >= total()){ Rt.T = total(); stop(); } mod().sync(Rt.playing); Rt.dirty = true; }
+  if (Rt.playing && !Rt.exporting){ const prevT = Rt.T; Rt.T += dt; nfSounds(prevT, Rt.T); if (Rt.T >= total()){ Rt.T = total(); stop(); } mod().sync(Rt.playing); Rt.dirty = true; }
   if (Rt.dirty || (S.format === "green" && GR.fg)){
     render(pctx, Rt.T, true); drawTimeline(); const tot = total();
     $("scrub").value = Math.round(Rt.T/tot*1000) || 0; $("time").textContent = `${fmt(Rt.T)} / ${fmt(tot)}`; Rt.dirty = false; }
@@ -1384,7 +1631,7 @@ function getDownloads(){ if (!dlP) dlP = (window.claude && window.claude.use) ? 
 async function exportVideo(){
   const note = $("exNote"); if (Rt.exporting) return;
   if (Rt.analyzing || !mod().ready()){ note.className = "note warn"; note.textContent = "Wait for your clips to finish analyzing first."; return; }
-  const hasAudio = mod().hasAudio(); if (hasAudio) ensureAudio();
+  const hasAudio = mod().hasAudio() || notifs().some(n => n.ding); if (hasAudio) ensureAudio();
   const mime = pickMime(hasAudio && !!recDest);
   if (!mime || !HTMLCanvasElement.prototype.captureStream){ note.className = "note warn"; note.textContent = "This browser can't record video. Try the latest Chrome or Safari on a computer."; return; }
   stop(); Rt.exporting = true; setBusy();
@@ -1399,7 +1646,7 @@ async function exportVideo(){
     await Promise.all([...MEDIA].map(e => e.v.seeking ? new Promise(r => e.v.addEventListener("seeked", r, {once:true})) : null));
     render(ectx, 0, false); rec.start(250);
     await new Promise(resolve => { const t0 = performance.now();
-      const loop = now => { Rt.T = Math.min(tot, Math.max(0, (now - t0)/1000));
+      const loop = now => { const prevT = Rt.T; Rt.T = Math.min(tot, Math.max(0, (now - t0)/1000)); nfSounds(prevT, Rt.T);
         mod().sync(Rt.T < tot); render(ectx, Rt.T, false); Rt.dirty = true; bar.firstElementChild.style.width = (Rt.T/tot*100) + "%";
         if (Rt.T >= tot){ resolve(); return; } requestAnimationFrame(loop); };
       requestAnimationFrame(loop); });
@@ -1444,6 +1691,7 @@ function showStep(){
   $("stepOf").textContent = "";
   if (pid === "captions") renderCaps();
   if (pid === "broll") renderBroll();
+  if (pid === "notify") renderNotifs();
   if (pid === "clips") renderClips();
   if (pid === "words"){ $("words").value = S.words[S.format] || ""; updateSecNote(); updateImgNote(); }
   outs();
@@ -1451,7 +1699,7 @@ function showStep(){
 function setFormat(fmt){
   stop(); S.format = fmt; S.step = 0; Rt.T = 0; persist();
   $$(".card").forEach(c => c.classList.toggle("on", c.dataset.fmt === fmt));
-  $("legend").innerHTML = mod().legend.map(([c, t]) => `<span><i class="swatch" style="background:var(${c})"></i>${t}</span>`).join("") + `<span><i class="swatch" style="background:var(--fg)"></i>B-roll</span><span>Tap the timeline to jump</span>`;
+  $("legend").innerHTML = mod().legend.map(([c, t]) => `<span><i class="swatch" style="background:var(${c})"></i>${t}</span>`).join("") + `<span><i class="swatch" style="background:var(--fg)"></i>B-roll</span><span><i class="swatch" style="background:var(--laneB)"></i>Notifications</span><span>Tap the timeline to jump</span>`;
   renderClips(); showStep(); mod().sync(false); Rt.dirty = true;
 }
 function radio(name, val){ const el = document.querySelector(`input[name=${name}][value="${val}"]`); if (el) el.checked = true; }

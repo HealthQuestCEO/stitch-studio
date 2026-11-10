@@ -18,6 +18,7 @@ A browser-based maker for 9:16 short videos (Reels, TikTok, YouTube Shorts, Face
 - B-roll photos with full screen, card, or top-half layouts and fade, slide, or zoom transitions
 - Timed captions and True/False/Myth/Fact stamps with pop, typewriter, word-by-word, or slide-up animation
 - Caption call-out stamp ("Read the caption ↓" and other presets, or custom text): sits on the last 3 seconds by default, has a gently bouncing arrow, and can be dragged in the preview but stays inside the safe zone
+- Phone notification: a text or email banner drops in at any point (with an optional notification sound), opens to a full screen built from your text or your own screenshot when you tap it, then goes picture-in-picture with you or the screen in the corner. The fake screens use generic icons, never a real app's logo
 - Series label: a small corner label that stays on for the whole video (for example READING YOUR LABS · 1). It remembers the last text used and can be dragged
 - Per-layer volume
 - Safe-zone guides (preview only)
