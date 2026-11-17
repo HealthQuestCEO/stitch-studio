@@ -205,7 +205,7 @@ details.subhead summary{cursor:pointer}
   <!-- POST PLANNER: when to post, which format and hook, and a log that teaches it -->
   <div id="planner" hidden>
     <div class="pTabs" role="tablist">
-      <button class="btn sm" data-ptab="fmt" role="tab">Prep: format, hook &amp; caption</button>
+      <button class="btn sm" data-ptab="fmt" role="tab">Prep</button>
       <button class="btn sm" data-ptab="when" role="tab">When to post</button>
       <button class="btn sm" data-ptab="log" role="tab">Post log</button>
     </div>
@@ -239,10 +239,15 @@ details.subhead summary{cursor:pointer}
     </section>
 
     <section class="step" data-ptab-panel="fmt" hidden>
-      <div class="field"><label class="lbl" for="stBeats">What story do you want to tell, or what question do you want to answer?</label>
-        <textarea id="stBeats" style="min-height:130px" placeholder="In your own words. Paste from your answer sheet. Example: Why I stopped teaching on here. I was getting zero to 300 views, my cousin told me to document my story, and AI can answer health questions in seconds but it can't tell my story."></textarea></div>
-      <div class="field"><label class="lbl" for="stHook">Your hook (optional)</label>
-        <input type="text" id="stHook" placeholder="Leave blank and Claude suggests three in your voice"></div>
+      <div class="field"><label class="lbl" for="stQ">1. Which question are you answering?</label>
+        <select id="stQ"></select>
+        <input type="text" id="stQOwn" placeholder="Type your own question or story idea" hidden style="margin-top:8px"></div>
+      <div class="field"><label class="lbl" for="stBeats">2. Your answer, in your own words</label>
+        <textarea id="stBeats" style="min-height:150px" placeholder="Talk like you'd tell a friend. Messy is fine. The real details are what make it sound like you."></textarea>
+        <p class="note">Saved in this browser as you type, per question. Your answer sheet doc is still the master copy.</p></div>
+      <details class="subhead"><summary class="lbl">More options (optional)</summary>
+      <div class="field"><label class="lbl" for="stHook">Your hook, if you already have one</label>
+        <input type="text" id="stHook" placeholder="Leave blank and Claude writes three in your voice"></div>
       <div class="pGrid">
         <div class="field"><label class="lbl" for="stType">Story type</label><select id="stType"></select></div>
         <div class="field"><label class="lbl" for="stHookType">Hook type</label><select id="stHookType"></select></div>
@@ -250,8 +255,9 @@ details.subhead summary{cursor:pointer}
       <div class="field"><label class="lbl" for="stCloser">Closer</label>
         <select id="stCloser"></select>
         <p class="note" id="stCloserNote"></p></div>
+      </details>
       <div class="row" id="clLive" hidden><button class="btn primary" id="clWrite">Plan this post with Claude</button><button class="btn sm" id="clIdeas">Get 3 reel ideas</button><button class="btn sm" id="clStop" hidden>Stop</button></div>
-      <p class="note" id="clLiveNote" hidden>Claude picks anything you left on "Let Claude pick" and gives you the format, hooks, scenes, the script to say, on-screen lines, the caption, what to record, and questions for you. The first time, Claude asks your permission.</p>
+      <p class="note" id="clLiveNote" hidden>Claude gives you the format, three hooks, scenes, the script to say, on-screen lines, the caption with your closer, what to record, and questions for you. The first time, Claude asks your permission.</p>
       <div id="clOutWrap" hidden><div id="clOut" style="white-space:pre-wrap;border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:8px 0;max-height:640px;overflow:auto;font-size:14px;line-height:1.5"></div>
         <div class="row"><button class="btn sm" id="clOutCopy">Copy Claude's answer</button><span class="note">Edit it so it sounds like you before you use it.</span></div></div>
       <div class="row"><button class="btn sm" id="clCopy">Copy prompt and open Claude</button><span class="note" id="clMsg" role="status"></span></div>
@@ -2560,7 +2566,7 @@ exLookUI();
 
 /* =============== post planner =============== */
 const PSTORE = "stitch-planner-v1";
-const P = {tab:"fmt", plat:"ig", per:3, topic:"switch", hkFam:"contrast", metric:"views", actH:[0,0,0,0,0,0,0,0], actD:[0,0,0,0,0,0,0], log:[]};
+const P = {tab:"fmt", plat:"ig", per:3, topic:"switch", hkFam:"contrast", metric:"views", actH:[0,0,0,0,0,0,0,0], actD:[0,0,0,0,0,0,0], log:[], ans:{}, clLast:{}};
 try { const sv = JSON.parse(localStorage.getItem(PSTORE) || "null"); if (sv) for (const k of Object.keys(P)) if (k in sv) P[k] = sv[k]; } catch(e){}
 function pSave(){ try { localStorage.setItem(PSTORE, JSON.stringify(P)); } catch(e){} }
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];           // index 0 = Monday
@@ -2673,10 +2679,12 @@ const FIT = { // 1–5, my starting judgment; your logged results move it. Missi
   redtape:    {explain:4, scenes:4, talk:4, prompter:4, gbig:3},
   mission:    {explain:5, scenes:4, talk:4, gbig:4, faceless:3},
   checkin:    {talk:5, explain:4, scenes:3, prompter:3},
+  kapwa:      {talk:5, scenes:3, prompter:3, green:3},
+  tennis:     {talk:5, scenes:4, prompter:3, green:3},
   ad:         {explain:5, faceless:5, scenes:4, green:4, talk:3, react:3},
 };
-const TOPICS = {switch:"The Switch", decoder:"Why I stopped teaching (The Decoder)", evolution:"The Evolution (NASPGHAN → HealthQuest)", stereotype:"The Stereotype (Filipina nurse hot take)", roots:"Roots (growing up)", nurse:"The Nurse (what I saw in clinic)", health:"My health / my kids' health (lesson inside)", builder:"The Builder (building with AI)", books:"The HealthQuest Stories books", built:"I built this feature because…", nos:"The No's (rejection, prevention funding)", redtape:"The Red Tape (health + school systems)", mission:"The Mission ($19B math)", checkin:"Check-in (my real numbers)", ad:"Ad (off days)"};
-const HOOK_FOR = {switch:"contrast", decoder:"contrast", evolution:"openloop", stereotype:"hottake", roots:"interview", nurse:"experience", health:"experience", builder:"thennow", books:"curiosity", built:"experience", nos:"hottake", redtape:"openloop", mission:"proof", checkin:"girl", ad:"contrast"};
+const TOPICS = {switch:"The Switch", decoder:"Why I stopped teaching (The Decoder)", evolution:"The Evolution (NASPGHAN → HealthQuest)", stereotype:"The Stereotype (Filipina nurse hot take)", roots:"Roots (growing up)", nurse:"The Nurse (what I saw in clinic)", health:"My health / my kids' health (lesson inside)", builder:"The Builder (building with AI)", books:"The HealthQuest Stories books", built:"I built this feature because…", nos:"The No's (rejection, prevention funding)", redtape:"The Red Tape (health + school systems)", mission:"The Mission ($19B math)", checkin:"Check-in (my real numbers)", kapwa:"Kapwa", tennis:"Tennis (what it taught me)", ad:"Ad (off days)"};
+const HOOK_FOR = {switch:"contrast", decoder:"contrast", evolution:"openloop", stereotype:"hottake", roots:"interview", nurse:"experience", health:"experience", builder:"thennow", books:"curiosity", built:"experience", nos:"hottake", redtape:"openloop", mission:"proof", checkin:"girl", kapwa:"interview", tennis:"thennow", ad:"contrast"};
 const HOOK_NAME = {girl:"I'm just a girl who…", interview:"Interview question", hottake:"Hot take", contrast:"Contrast", thennow:"Then & now", openloop:"Open loop", experience:"Experience", curiosity:"Curiosity", proof:"Proof"};
 const HOOK_WHY = {
   girl:"Your umbrella line. Light, self-aware, and it ties every story back to the mission.",
@@ -2756,11 +2764,16 @@ const STORY_CONTEXT = [
   "- Mission: HealthQuest in the hands of 10 million kids in 5 years, changing the trajectory of 1 million. About $19,000 in extra lifetime medical costs per child with obesity (Finkelstein et al., Pediatrics, 2014; lower estimate $12,660), so up to $19 billion. Always say 'up to'.",
   "- Umbrella line: 'I'm just a girl trying to save healthcare $19 billion.' Tagline idea: 'Most people talk about money earned. I'm talking about money saved.'",
   "- My story so far: years in clinic; NASPGHAN, where everyone talked about childhood obesity and I knew nothing could scale; version 0 was a questionnaire for kids I wanted to run at work; the therapy pill early on, around trying to get my own kid support at school; version 1 of HealthQuest; my first win at NASPGHAN Baby Shark Tank; launch Dec 2025. I fought becoming a Filipina nurse and it became my calling. I played tennis. Kapwa matters to me. I wrote the HealthQuest Stories books, starting with one to explain HealthQuest to my daughter.",
-  "- Weekly mix: 2 story posts, 1 Building HealthQuest post, 1 Sunday ad.",
+  "- HealthQuest is built on four research-backed approaches never combined in one place before: tailored goals, family-based behavior change, the COM-B framework (capability, opportunity, motivation, behavior), and gamification. Keep how it works at the level that is already public.",
+  "- Weekly mix: 3 story posts a week, ads on the off days.",
   "- Privacy: no names, schools or diagnoses for my daughters; nothing internal about my employer; my clinic patients don't use HealthQuest, never imply they do.",
 ].join("\n");
 const FMT_LIST = () => Object.values(FMTS).map(f => f[0]).join("; ");
 const RULES = "Rules: write in my voice. Plain words, contractions, short and varied sentences, no marketing polish, no stock phrases. Don't invent any fact, number, name, date or event about my life; where a detail is missing, write [ASK APRIL: ...]. Never call HealthQuest an app; never say download or install. Any health fact needs a source from AAP/HealthyChildren, NASPGHAN/GIKids, NAMI, NEDA, CDC or WHO; my own experience doesn't. Money claims say 'up to $19 billion'. Storytelling: I'm the main character; every post carries my perspective or opinion, not just facts (story = topic + perspective); talk to one person, so use 'you' more than 'I'; don't only teach, only sell or only show expertise; on-screen text short enough to read at a glance (about 6 words a line), never rushed. Don't add feelings or reactions I didn't state. No weight-focused words or hashtags (no #ChildhoodObesity, no weight loss); HealthQuest never uses weight talk. No 'tips' hashtags, since this account is story, not tips.";
+const QBANK = [["roots", "Where I come from", ["Where did you grow up, and who lived in the house?", "What did your mom (or lola) do when you got sick? Name the remedy.", "What was the one food that was always there?", "What did your family say when a kid was \"too skinny\" or \"getting big\"?", "What's something your family did that your American friends thought was weird?", "What's something you were embarrassed about as a kid that you're proud of now?", "What did your parents give up so you could have what you have?", "What's one thing you do as a mom that's straight from your mom?"]], ["roots", "Childhood and my beliefs", ["Describe your childhood in three words. Why those three?", "What did you believe about food, bodies and health as a kid? Where did that come from?", "Which of those beliefs do you still hold? Which did you have to unlearn?", "What moment from childhood made you who you are?", "What do you wish an adult had told you back then?"]], ["roots", "Being Filipino American", ["What does being Filipino mean to you?", "What part of the culture do you carry into your work every day?", "Have people lumped you in as \"Asian\" and missed what's Filipino about you?", "What's different about Filipino culture that people don't expect?", "Did you ever feel \"not Filipino enough\"? When?"]], ["kapwa", "Kapwa", ["What does kapwa mean to you?", "Who taught you kapwa, or where did you see it growing up?", "How does kapwa show up in how you treat families as a nurse?", "Is kapwa why HealthQuest is built around the whole family?"]], ["tennis", "Tennis", ["How did you start playing tennis?", "Your best match ever? Your worst loss?", "What did tennis teach you that you use building HealthQuest?", "What did losing teach you?"]], ["stereotype", "The stereotype", ["When did you first notice that so many Filipina aunties were nurses?", "What did you want to be instead of a nurse?", "Who decided you'd be a nurse? What did they actually say?", "How did you fight it?", "What was the moment nursing became your calling?", "What's actually good about the stereotype?", "What's the hard side of it nobody talks about?", "What would you tell the 18-year-old you who was fighting it?"]], ["nurse", "What I saw as a nurse", ["What's the thing you've said to parents a thousand times?", "What do parents get wrong that isn't their fault?", "Is there a kid you still think about?", "What's the funniest thing a kid has said to you in clinic?", "What makes you mad about how kids get care?"]], ["evolution", "The evolution of HealthQuest", ["Here's how I started my journey to saving $19 billion: what happened at NASPGHAN?", "What was the questionnaire, and why did you want to run it at work?", "What was the therapy pill?", "What happened when you tried to get your kid support at school?", "When did you decide to build it yourself?", "What was version 1 like? What changed after?", "What did Baby Shark Tank change for you?"]], ["builder", "Building it", ["What did you know about tech when you started?", "What did the first version look like? How bad was it?", "Which AI tools have you tried? Which flopped?", "What's the dumbest mistake you made building it?", "When do you actually work on this?"]], ["redtape", "The red tape", ["When it worked, what did you think the next step was? What was it really?", "What hurdles have you hit with health systems?", "What hurdles have you hit with schools?", "Has anyone said \"we love it, but who pays for it?\""]], ["nos", "The no's", ["What's the worst no you've gotten?", "What did you do the day after?", "Why does nobody want to fund prevention?", "Have you ever almost quit?", "What's a no that turned out to be a good thing?"]], ["decoder", "Why I stopped teaching", ["Why did you stop teaching on here?", "AI can answer health questions in seconds. So why follow a nurse?", "What's the most cringe thing you've posted?", "What's the comment that made it worth it?"]], ["mission", "The mission", ["Why $19 billion?", "Why 10 million kids?", "Why start at age 6?", "What happens if you don't pull it off?", "What does HealthQuest look like in 5 years if it works?"]], ["built", "I built this feature because…", ["Why did you build the barrier assessment?", "Why does HealthQuest never say \"good food\" or \"bad food\"?", "Why family challenges?", "Why games?", "Why English and Spanish?", "Why no personal health info?"]], ["built", "The science: 4 principles", ["Why these four principles, and why combine them?", "What is a tailored goal, and why does one size not fit all?", "Why does the whole family have to be in it?", "How would you explain COM-B to a parent?", "Why games? Wouldn't lessons be enough?"]], ["books", "The HealthQuest Stories books", ["What made you think \"this should be a book\"?", "What did your daughter think of the first book?", "Which book comes from your own childhood?", "What exactly did AI help with on the books?", "What's the best reaction you've had from a kid or parent?"]], ["ad", "Ads", ["Why should a parent try HealthQuest this week?", "What's the $150 giveaway, and how do families enter?"]]];
+if (!P.ans) P.ans = {};
+function curQ(){ const v = $("stQ").value; if (v === "own") return {id:"own", q: $("stQOwn").value.trim(), type: null}; const [g, i] = v.split(".").map(Number); return {id: v, q: QBANK[g][2][i], type: QBANK[g][0]}; }
+function loadAnswer(){ const v = $("stQ").value; $("stQOwn").hidden = v !== "own"; $("stBeats").value = P.ans[v] || ""; renderCloserNote(); }
 const CLOSERS = [
   {g:"standard", t:"I'm April, a pediatric nurse practitioner and mom, building HealthQuest one story at a time. Link's in my bio. As always, be kind to others, and love yourself. Until next time!"},
   {g:"standard", t:"I'm April, just a girl trying to save healthcare up to $19 billion. Follow along, and find HealthQuest in my bio. Be kind to others, and love yourself. Until next time!"},
@@ -2776,7 +2789,7 @@ const CLOSERS = [
 ];
 const CL_GROUP_NAME = {standard:"Standard", mission:"Mission", series:"Mini-series (Part 2 next)", ad:"Ad", checkin:"Check-in"};
 if (!P.clLast) P.clLast = {};
-function closerGroup(){ const t = $("stType").value, h = $("stHookType").value;
+function closerGroup(){ const q = curQ(), t0 = $("stType").value, t = t0 === "auto" && q.type ? q.type : t0, h = $("stHookType").value;
   if (t === "ad") return "ad"; if (t === "checkin") return "checkin"; if (h === "openloop") return "series"; if (t === "mission") return "mission"; return "standard"; }
 function autoCloser(){ const g = closerGroup(), ids = CLOSERS.map((c, i) => i).filter(i => CLOSERS[i].g === g), last = P.clLast[g];
   const pos = ids.indexOf(last); return ids[(pos + 1) % ids.length]; }
@@ -2784,8 +2797,8 @@ function chosenCloser(){ const v = $("stCloser").value; return v === "auto" ? au
 function renderCloserNote(){ const i = chosenCloser(); $("stCloserNote").textContent = ($("stCloser").value === "auto" ? `Next up (${CL_GROUP_NAME[CLOSERS[i].g]}, rotates so you don't repeat): ` : "") + CLOSERS[i].t; }
 function useCloser(){ const i = chosenCloser(); P.clLast[CLOSERS[i].g] = i; pSave(); renderCloserNote(); return CLOSERS[i].t; }
 function stInputs(){
-  const t = $("stType").value, h = $("stHookType").value;
-  return {
+  const q = curQ(), t0 = $("stType").value, t = t0 === "auto" && q.type ? q.type : t0, h = $("stHookType").value;
+  return { question: q.q,
     type: t === "auto" ? `Pick the best fit from: ${Object.values(TOPICS).join("; ")}` : TOPICS[t],
     hookType: h === "auto" ? `Pick the best fit from: ${Object.entries(HOOK_NAME).map(([k, v]) => `${v} (${HOOK_WHY[k]})`).join(" | ")}` : `${HOOK_NAME[h]} (${HOOK_WHY[h]})`,
     hook: $("stHook").value.trim(), story: $("stBeats").value.trim(), isAd: t === "ad"
@@ -2794,7 +2807,7 @@ function stInputs(){
 function claudePrompt(){
   const x = stInputs(); x.closer = useCloser();
   if (x.isAd) return [STORY_CONTEXT, "", RULES, "No testimonials and nothing implying my clinic patients use HealthQuest.", "",
-    "Write a HealthQuest ad for an off day.", `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "", x.story ? `What it's about, in my words:\n${x.story}` : "", "",
+    "Write a HealthQuest ad for an off day.", `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "", x.question ? `The question: ${x.question}` : "", x.story ? `My answer, in my words:\n${x.story}` : "", "",
     "Give me 2 versions (A and B to test). For each:",
     `- Best format from this list and why, in one line: ${FMT_LIST()}`,
     "- The hook in the first 2 seconds (on screen + spoken)",
@@ -2805,7 +2818,7 @@ function claudePrompt(){
     "- Questions for me about anything you had to guess"].filter(Boolean).join("\n");
   return [STORY_CONTEXT, "", RULES, "",
     "Plan my next @pnphealthdecoder story post.", "",
-    "What I want this post to tell or answer, in my words:", x.story || "(nothing yet; ask me the 3 questions you need answered first)", "",
+    x.question ? `The question I'm answering: ${x.question}` : "", "My answer, in my words:", x.story || "(nothing yet; ask me the 3 questions you need answered first)", "",
     `Story type: ${x.type}`, `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "My hook: not written yet.", "",
     "Give me, in this order:",
     "1. The story type and hook type you'd use, and one line on why.",
@@ -2822,7 +2835,7 @@ function claudePrompt(){
 function ideasPrompt(){
   const x = stInputs();
   return [STORY_CONTEXT, "", RULES, "",
-    `Story type: ${x.type}`, `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "", x.story ? `What I want to tell, in my words:\n${x.story}` : "", "",
+    `Story type: ${x.type}`, `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "", x.question ? `The question I'm answering: ${x.question}` : "", x.story ? `My answer, in my words:\n${x.story}` : "", "",
     "Give me 3 different reel ideas. For each:",
     "- The on-screen one-liner (first 2 seconds)",
     `- The best format from this list, and one line on why: ${FMT_LIST()}`,
@@ -2893,6 +2906,9 @@ $("lgCsvIn").addEventListener("change", async e => { const f = e.target.files[0]
     if (o.at && o.plat && !seen.has(o.at + o.plat)){ P.log.push(o); seen.add(o.at + o.plat); n++; } }
   pSave(); $("lgMsg").textContent = `Loaded ${n} post${n === 1 ? "" : "s"}.`; e.target.value = ""; pRender(); });
 fillSel($("lgFmt"), FMTS); fillSel($("lgTopic"), TOPICS); fillSel($("pTopic"), TOPICS); fillSel($("hkFam"), HOOK_NAME);
+{ const sel = $("stQ"); QBANK.forEach((grp, g) => { const og = document.createElement("optgroup"); og.label = grp[1]; grp[2].forEach((q, i) => og.append(new Option(q, g + "." + i))); sel.append(og); }); sel.append(new Option("My own question or story…", "own"));
+  sel.addEventListener("change", loadAnswer);
+  $("stBeats").addEventListener("input", () => { P.ans[$("stQ").value] = $("stBeats").value; pSave(); }); }
 { const sel = $("stCloser"); sel.append(new Option("Auto: rotate the closer that fits this post", "auto")); CLOSERS.forEach((c, i) => sel.append(new Option(`${CL_GROUP_NAME[c.g]}: ${c.t.slice(0, 60)}…`, i))); }
 for (const id of ["stCloser", "stType", "stHookType"]) $(id).addEventListener("change", renderCloserNote);
 for (const [id, obj] of [["stType", TOPICS], ["stHookType", HOOK_NAME]]){ const sel = $(id); sel.append(new Option("Let Claude pick", "auto")); for (const k in obj) sel.append(new Option(obj[k], k)); }
@@ -2911,7 +2927,7 @@ if (S.projectId && window.indexedDB) openProject(S.projectId, true);   // bring 
 requestAnimationFrame(tick);
 getDownloads();
 P.tab = "fmt"; openPlanner(true);   // Prep is the first screen
-renderCloserNote();
+loadAnswer();
 })();
 </script>
 
