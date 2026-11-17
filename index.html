@@ -198,15 +198,15 @@ details.subhead summary{cursor:pointer}
   <header>
     <h1>Stitch Studio</h1>
     <span class="tally" id="tally"><i></i><span id="tallyTxt">Standby</span></span>
-    <span class="row" style="margin-left:auto"><button class="btn sm" id="nowChip" title="Open the post planner"></button><button class="btn sm" id="plannerBtn">Post planner</button></span>
+    <span class="row" style="margin-left:auto"><button class="btn sm" id="nowChip" title="Open the post planner"></button><button class="btn sm" id="plannerBtn">Prep &amp; post planner</button></span>
     <p class="sub">Pick a format and it walks you through each step. Everything exports as a 1080×1920 video with sound, keeping text inside the Reels/TikTok/Shorts safe zone.</p>
   </header>
 
   <!-- POST PLANNER: when to post, which format and hook, and a log that teaches it -->
   <div id="planner" hidden>
     <div class="pTabs" role="tablist">
+      <button class="btn sm" data-ptab="fmt" role="tab">Prep: format, hook &amp; caption</button>
       <button class="btn sm" data-ptab="when" role="tab">When to post</button>
-      <button class="btn sm" data-ptab="fmt" role="tab">Format &amp; hook</button>
       <button class="btn sm" data-ptab="log" role="tab">Post log</button>
     </div>
 
@@ -221,6 +221,7 @@ details.subhead summary{cursor:pointer}
       <p class="note" id="pConf"></p>
       <div class="heat" id="heat" aria-label="Posting score by day and hour"></div>
       <div class="legend"><span><i class="swatch" style="background:color-mix(in srgb,var(--accent) 15%,var(--field))"></i>Weaker</span><span><i class="swatch" style="background:var(--accent)"></i>Stronger</span><span>Times are your computer's clock (Central).</span></div>
+      <p class="note"><b>Your week:</b> 3 story posts, with ads on the off days. Every story opens with a hook; the $19B mission is the thread through all of them.</p>
       <div class="subhead"><span class="lbl">Your next posts</span><ol class="pPlan" id="pPlan"></ol></div>
       <details class="subhead"><summary class="lbl">Add your Instagram "Most active times" (makes this yours)</summary>
         <p class="note">In Instagram: Professional dashboard → Total followers → Most active times. Give each bar a rough height from 0 to 10. Hours first, then days. Facebook's Meta Business Suite has the same chart under Audience.</p>
@@ -238,29 +239,40 @@ details.subhead summary{cursor:pointer}
     </section>
 
     <section class="step" data-ptab-panel="fmt" hidden>
-      <div class="field"><label class="lbl" for="pTopic">What's this post about?</label>
-        <select id="pTopic">
-          <option value="myth">Myth or fact</option>
-          <option value="explain">Explain a test, label or body thing (like I'm 10)</option>
-          <option value="tip">Quick how-to tip for parents</option>
-          <option value="story">Clinic story (no identifying details)</option>
-          <option value="react">Responding to a claim or trend</option>
-          <option value="promo">Book, giveaway or HealthQuest feature</option>
-        </select></div>
+      <div class="field"><label class="lbl" for="stBeats">What story do you want to tell, or what question do you want to answer?</label>
+        <textarea id="stBeats" style="min-height:130px" placeholder="In your own words. Paste from your answer sheet. Example: Why I stopped teaching on here. I was getting zero to 300 views, my cousin told me to document my story, and AI can answer health questions in seconds but it can't tell my story."></textarea></div>
+      <div class="field"><label class="lbl" for="stHook">Your hook (optional)</label>
+        <input type="text" id="stHook" placeholder="Leave blank and Claude suggests three in your voice"></div>
+      <div class="pGrid">
+        <div class="field"><label class="lbl" for="stType">Story type</label><select id="stType"></select></div>
+        <div class="field"><label class="lbl" for="stHookType">Hook type</label><select id="stHookType"></select></div>
+      </div>
+      <div class="row" id="clLive" hidden><button class="btn primary" id="clWrite">Plan this post with Claude</button><button class="btn sm" id="clIdeas">Get 3 reel ideas</button><button class="btn sm" id="clStop" hidden>Stop</button></div>
+      <p class="note" id="clLiveNote" hidden>Claude picks anything you left on "Let Claude pick" and gives you the format, hooks, scenes, the script to say, on-screen lines, the caption, what to record, and questions for you. The first time, Claude asks your permission.</p>
+      <div id="clOutWrap" hidden><div id="clOut" style="white-space:pre-wrap;border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:8px 0;max-height:640px;overflow:auto;font-size:14px;line-height:1.5"></div>
+        <div class="row"><button class="btn sm" id="clOutCopy">Copy Claude's answer</button><span class="note">Edit it so it sounds like you before you use it.</span></div></div>
+      <div class="row"><button class="btn sm" id="clCopy">Copy prompt and open Claude</button><span class="note" id="clMsg" role="status"></span></div>
+      <p class="note">No Claude buttons? You're on the GitHub copy. This copies the same prompt; paste it into your Social Media project chat.</p>
+      <details class="subhead"><summary class="lbl">Or plan it yourself: format ranking and hook shapes</summary>
+      <div class="field"><label class="lbl" for="pTopic">Which story is this post?</label>
+        <select id="pTopic"></select></div>
       <p class="note" id="fmtConf"></p>
       <ol class="pRank" id="fmtRank"></ol>
       <div class="subhead"><span class="lbl">Hook</span>
         <div class="pGrid">
           <div class="field"><label class="lbl" for="hkFam">Hook type</label>
-            <select id="hkFam"><option value="experience">Experience</option><option value="contrast">Contrast</option><option value="curiosity">Curiosity</option><option value="proof">Proof</option></select></div>
+            <select id="hkFam"></select></div>
           <div class="field"><label class="lbl" for="hkTpl">Starter</label><select id="hkTpl"></select></div>
         </div>
         <p class="note" id="hkWhy"></p>
         <textarea id="hkText" style="min-height:90px" aria-label="Your hook"></textarea>
         <p class="note warn" id="hkWarn" hidden>Proof hooks need a real study, guideline or number you can cite. Leave this one out if you don't have the source in hand.</p>
         <div class="row"><button class="btn sm primary" id="hkUse">Put it at the top of my words</button><button class="btn sm" id="hkCopy">Copy</button><span class="note" id="hkMsg" role="status"></span></div>
-        <p class="note">Fill in the [brackets]. Your sign-off still goes at the end as always.</p>
+        <p class="note">Pick a starter to see its shape, then say it your own way. Your words, not a template.</p>
+        <p class="note"><b>Story shape:</b> hook → what happened → one health lesson → "that's why HealthQuest…" → closer. Any health fact needs its source in the caption. Your own experience doesn't.</p>
+
       </div>
+      </details>
     </section>
 
     <section class="step" data-ptab-panel="log" hidden>
@@ -269,7 +281,7 @@ details.subhead summary{cursor:pointer}
         <label>Posted<input type="datetime-local" id="lgAt"></label>
         <label>Platform<select id="lgPlat"><option value="ig">Instagram</option><option value="fb">Facebook</option><option value="tt">TikTok</option><option value="yt">YouTube Shorts</option></select></label>
         <label>Format<select id="lgFmt"></select></label>
-        <label>Hook<select id="lgHook"><option value="">Not sure</option><option value="experience">Experience</option><option value="contrast">Contrast</option><option value="curiosity">Curiosity</option><option value="proof">Proof</option></select></label>
+        <label>Hook<select id="lgHook"><option value="">Not sure</option></select></label>
         <label>Topic<select id="lgTopic"></select></label>
         <label>Views<input type="number" id="lgViews" min="0"></label>
         <label>Likes<input type="number" id="lgLikes" min="0"></label>
@@ -2545,7 +2557,7 @@ exLookUI();
 
 /* =============== post planner =============== */
 const PSTORE = "stitch-planner-v1";
-const P = {tab:"when", plat:"ig", per:3, topic:"myth", hkFam:"contrast", metric:"views", actH:[0,0,0,0,0,0,0,0], actD:[0,0,0,0,0,0,0], log:[]};
+const P = {tab:"fmt", plat:"ig", per:3, topic:"switch", hkFam:"contrast", metric:"views", actH:[0,0,0,0,0,0,0,0], actD:[0,0,0,0,0,0,0], log:[]};
 try { const sv = JSON.parse(localStorage.getItem(PSTORE) || "null"); if (sv) for (const k of Object.keys(P)) if (k in sv) P[k] = sv[k]; } catch(e){}
 function pSave(){ try { localStorage.setItem(PSTORE, JSON.stringify(P)); } catch(e){} }
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];           // index 0 = Monday
@@ -2639,36 +2651,58 @@ const FMTS = {
   gmirror:["Green screen: mirror twin","Two of you arguing it out. Fits a myth vs. fact back-and-forth."],
   gsil:["Green screen: inside the head","Your outline filled with footage. Fits \"what's happening inside your body.\""],
   gbig:["Green screen: big and small","Size jumps on each beat. Fits \"tiny habit, big difference.\""],
-  talk:["Talking head (Captions)","Just you and captions. Your most personal format."],
+  talk:["Talking head / interview","Just you and captions, or the question on screen and you answering it. Your most personal format."],
   explain:["Explainer cards (no camera)","Voiceover over animated cards. Fits lists, tools and \"3 things\" posts, and ends on a comment keyword."],
   faceless:["Faceless graphic (Canva)","Your attraction layer for likes, comments and giveaways."],
 };
-const FIT = { // 1–5, my starting judgment; your logged results move it
-  myth:    {explain:4, react:5, gmirror:5, green:4, scenes:4, prompter:3, talk:3, faceless:3, gsil:2, gbig:2},
-  explain: {green:5, gsil:5, prompter:4, scenes:4, talk:3, faceless:3, gbig:2, react:2, gmirror:2},
-  tip:     {explain:5, scenes:5, prompter:5, gbig:4, talk:4, green:3, faceless:3, react:2, gmirror:2, gsil:2},
-  story:   {explain:1, talk:5, prompter:4, scenes:3, green:3, gsil:2, faceless:2, react:1, gmirror:2, gbig:1},
-  react:   {react:5, gmirror:4, green:4, talk:3, scenes:3, prompter:2, faceless:2, gsil:2, gbig:2},
-  promo:   {explain:5, faceless:5, scenes:4, react:4, talk:4, green:3, prompter:3, gbig:3, gmirror:2, gsil:2},
+const FIT = { // 1–5, my starting judgment; your logged results move it. Missing formats count as 1.
+  switch:     {talk:5, scenes:5, prompter:4, green:3, gbig:2, faceless:2, react:2},
+  decoder:    {talk:5, scenes:4, react:3, prompter:3, green:3},
+  evolution:  {talk:5, scenes:4, prompter:4, explain:3, green:3},
+  stereotype: {talk:5, gmirror:4, scenes:4, react:3, prompter:3},
+  roots:      {talk:5, scenes:3, prompter:3, green:3, faceless:2},
+  nurse:      {talk:5, prompter:4, scenes:3, green:3},
+  health:     {talk:5, scenes:4, prompter:4, green:4, gsil:3},
+  builder:    {talk:4, scenes:4, green:4, explain:3, prompter:3},
+  books:      {talk:4, scenes:4, green:4, explain:3, faceless:3},
+  built:      {green:5, scenes:5, talk:4, explain:4, prompter:3},
+  nos:        {talk:5, prompter:4, scenes:3, gmirror:3},
+  redtape:    {explain:4, scenes:4, talk:4, prompter:4, gbig:3},
+  mission:    {explain:5, scenes:4, talk:4, gbig:4, faceless:3},
+  checkin:    {talk:5, explain:4, scenes:3, prompter:3},
+  ad:         {explain:5, faceless:5, scenes:4, green:4, talk:3, react:3},
 };
-const TOPICS = {myth:"Myth or fact", explain:"Explain it like I'm 10", tip:"How-to tip", story:"Clinic story", react:"Responding to a claim", promo:"Book / giveaway / HealthQuest"};
-const HOOK_FOR = {myth:"contrast", explain:"curiosity", tip:"experience", story:"experience", react:"contrast", promo:"curiosity"};
+const TOPICS = {switch:"The Switch", decoder:"Why I stopped teaching (The Decoder)", evolution:"The Evolution (NASPGHAN → HealthQuest)", stereotype:"The Stereotype (Filipina nurse hot take)", roots:"Roots (growing up)", nurse:"The Nurse (what I saw in clinic)", health:"My health / my kids' health (lesson inside)", builder:"The Builder (building with AI)", books:"The HealthQuest Stories books", built:"I built this feature because…", nos:"The No's (rejection, prevention funding)", redtape:"The Red Tape (health + school systems)", mission:"The Mission ($19B math)", checkin:"Check-in (my real numbers)", ad:"Ad (off days)"};
+const HOOK_FOR = {switch:"contrast", decoder:"contrast", evolution:"openloop", stereotype:"hottake", roots:"interview", nurse:"experience", health:"experience", builder:"thennow", books:"curiosity", built:"experience", nos:"hottake", redtape:"openloop", mission:"proof", checkin:"girl", ad:"contrast"};
+const HOOK_NAME = {girl:"I'm just a girl who…", interview:"Interview question", hottake:"Hot take", contrast:"Contrast", thennow:"Then & now", openloop:"Open loop", experience:"Experience", curiosity:"Curiosity", proof:"Proof"};
 const HOOK_WHY = {
-  experience:"Starts from something you've lived or seen in clinic. Builds trust fast.",
-  contrast:"Sets up what most people do, then flips it. Made for myth-busting.",
-  curiosity:"Opens a gap the viewer wants closed. Made for explaining how the body works.",
-  proof:"Leads with a study, guideline or result. Only use it with a source you can name.",
+  girl:"Your umbrella line. Light, self-aware, and it ties every story back to the mission.",
+  interview:"Someone off camera asks, the question shows on screen, you answer. Every word is yours, so it never sounds scripted.",
+  hottake:"An opinion people will argue with. Drives comments. Pay it off with your own story, not an argument.",
+  contrast:"Sets up what most people do, then flips it. Your strongest opener for a first impression.",
+  thennow:"An old photo or old version, then you today. People can't help watching the change.",
+  openloop:"Stops at the cliffhanger so people follow for Part 2. Use it on every mini-series.",
+  experience:"Starts from something you lived, as a mom or in clinic. This is where the health lesson rides.",
+  curiosity:"Opens a gap the viewer wants closed. Good as line 2 after a stronger opener.",
+  proof:"Leads with a number and its source. Only use it with a source you can name.",
 };
-const HOOKS = {
-  experience:["After [X] years in pediatrics, this is the question parents ask me most: [question].","The first time a parent asked me about [topic], I gave the textbook answer. Here's what I say now.","I wish someone had told parents this about [topic] before [moment].","I used to tell families [old advice]. I don't anymore. Here's why."],
-  contrast:["Most parents try [common fix] for [problem]. Here's what I'd do instead.","[Food or habit] looks healthy. It might be the reason for [problem].","Myth: [claim]. Here's what's actually going on.","The obvious fix for [problem] isn't the one that works."],
-  curiosity:["There's a reason [surprising thing] happens, and it's not what you think.","Look at one number on [label or lab report]. Here's what it tells you.","Most parents never notice what happens between [step A] and [step B].","What actually happens inside your kid's body when [action]?"],
-  proof:["[Organization] recommends [guideline]. Most families I see are doing [different thing].","A [year] study in [journal] asked [question]. The answer surprised me.","[Number] out of [number] kids [finding], according to [source]."],
+const HOOKS = { // shapes only; you say it your way
+  girl:["I'm just a girl who [twist].","I'm just a girl trying to save healthcare $19 billion. Here's [what happened]."],
+  interview:["[The question, on screen.] Then just answer it.","Someone off camera asks: \"[question]\""],
+  hottake:["Hot take: [something people will argue with].","Unpopular opinion from a pediatric nurse practitioner: [opinion]."],
+  contrast:["Most people [do X]. I'm [doing Y].","Most people post the money they made. I'm here for the $19B we could save."],
+  thennow:["[Old photo] → \"This was me at [age]. Now [one line].\"","Version 1 of HealthQuest → today."],
+  openloop:["[The cliffhanger]… Part 2.","And that's when everything changed. Part 2."],
+  experience:["In clinic, the thing I saw over and over was [it].","As a mom, I [what happened]. As a nurse, I knew [what]."],
+  curiosity:["Why [surprising thing]?","Here's how I started my journey to saving $19 billion."],
+  proof:["[Organization] says [fact]. Here's what that meant for my family.","$19,000 per kid × 1 million kids. Here's the math."],
 };
+if (!TOPICS[P.topic]) P.topic = "switch";
+if (!HOOKS[P.hkFam]) P.hkFam = HOOK_FOR[P.topic];
 function fmtEffects(){ return effect(scored(), e => e.fmt, 2); }
 function renderFmt(){
   const t = P.topic, fit = FIT[t], eff = fmtEffects(), n = scored().length, hk = effect(scored(), e => e.hook, 2);
-  const rows = Object.keys(FMTS).map(k => { const e = eff[k]; return {k, s: fit[k]*Math.exp(e ? e.eff : 0), e}; }).sort((a, b) => b.s - a.s).slice(0, 5);
+  const rows = Object.keys(FMTS).map(k => { const e = eff[k]; return {k, s: (fit[k] || 1)*Math.exp(e ? e.eff : 0), e}; }).sort((a, b) => b.s - a.s).slice(0, 5);
   const ol = $("fmtRank"); ol.innerHTML = "";
   for (const r of rows){ const li = document.createElement("li"), b = document.createElement("b"); b.textContent = FMTS[r.k][0];
     const sc = document.createElement("span"); sc.className = "score"; sc.textContent = Math.min(100, Math.round(r.s/5*100));
@@ -2680,8 +2714,8 @@ function renderFmt(){
 function renderHook(keepText){
   $("hkFam").value = P.hkFam; const sel = $("hkTpl"); sel.innerHTML = "";
   HOOKS[P.hkFam].forEach((h, i) => { const o = document.createElement("option"); o.value = i; o.textContent = h.length > 70 ? h.slice(0, 68) + "…" : h; sel.append(o); });
-  $("hkWhy").textContent = HOOK_WHY[P.hkFam] + (HOOK_FOR[P.topic] === P.hkFam ? ` This is the usual match for a ${TOPICS[P.topic].toLowerCase()} post.` : "");
-  $("hkWarn").hidden = P.hkFam !== "proof"; if (!keepText) $("hkText").value = HOOKS[P.hkFam][0];
+  $("hkWhy").textContent = HOOK_WHY[P.hkFam] + (HOOK_FOR[P.topic] === P.hkFam ? ` This is the usual match for a ${TOPICS[P.topic]} post.` : "");
+  $("hkWarn").hidden = P.hkFam !== "proof"; $("hkText").placeholder = HOOKS[P.hkFam][0] + "  (say it your way)"; if (!keepText) $("hkText").value = "";
 }
 /* log */
 function fillSel(sel, obj){ sel.innerHTML = ""; for (const k in obj){ const o = document.createElement("option"); o.value = k; o.textContent = Array.isArray(obj[k]) ? obj[k][0] : obj[k]; sel.append(o); } }
@@ -2703,7 +2737,7 @@ function renderLog(){
 function pRender(){ $$("[data-ptab]").forEach(b => b.classList.toggle("on", b.dataset.ptab === P.tab)); $$("[data-ptab-panel]").forEach(s => s.hidden = s.dataset.ptabPanel !== P.tab);
   $("pPlat").value = P.plat; $("pPer").value = P.per; $("pTopic").value = P.topic; $("lgMetric").value = P.metric;
   renderWhen(); renderFmt(); renderLog(); }
-function openPlanner(on){ $("planner").hidden = !on; $("studio").hidden = on; $("plannerBtn").textContent = on ? "Back to the studio" : "Post planner"; if (on){ stop(); pRender(); } window.scrollTo({top:0}); }
+function openPlanner(on){ $("planner").hidden = !on; $("studio").hidden = on; $("plannerBtn").textContent = on ? "Back to the studio" : "Prep & post planner"; if (on){ stop(); pRender(); } window.scrollTo({top:0}); }
 $("plannerBtn").addEventListener("click", () => openPlanner($("planner").hidden));
 $("nowChip").addEventListener("click", () => { P.tab = "when"; openPlanner(true); });
 $$("[data-ptab]").forEach(b => b.addEventListener("click", () => { P.tab = b.dataset.ptab; pSave(); pRender(); }));
@@ -2711,7 +2745,95 @@ $("pPlat").addEventListener("change", e => { P.plat = e.target.value; pSave(); r
 $("pPer").addEventListener("input", e => { P.per = clamp(+e.target.value || 3, 1, 7); pSave(); renderWhen(); });
 $("pTopic").addEventListener("change", e => { P.topic = e.target.value; P.hkFam = HOOK_FOR[P.topic]; pSave(); renderFmt(); renderHook(); });
 $("hkFam").addEventListener("change", e => { P.hkFam = e.target.value; pSave(); renderHook(); });
-$("hkTpl").addEventListener("change", e => { $("hkText").value = HOOKS[P.hkFam][+e.target.value]; });
+const STORY_CONTEXT = [
+  "Context about me and my account (@pnphealthdecoder):",
+  "- I'm April, a pediatric nurse practitioner with about 20 years in pediatrics, Filipino American, a mom of two daughters, and the founder of HealthQuest, a gamified health literacy platform for kids 6-12, teens and parents. Never call it an app.",
+  "- As of 17 Nov 2026 the account is all story, no standalone teaching clips. AI can give health info in a flash; my story can't be recreated by AI. Health lessons live inside the stories, and the full health decoding happens in HealthQuest.",
+  "- Central thread: prevention falls through the cracks between home, school and the doctor's office. HealthQuest is the bridge.",
+  "- Mission: HealthQuest in the hands of 10 million kids in 5 years, changing the trajectory of 1 million. About $19,000 in extra lifetime medical costs per child with obesity (Finkelstein et al., Pediatrics, 2014; lower estimate $12,660), so up to $19 billion. Always say 'up to'.",
+  "- Umbrella line: 'I'm just a girl trying to save healthcare $19 billion.' Tagline idea: 'Most people talk about money earned. I'm talking about money saved.'",
+  "- My story so far: years in clinic; NASPGHAN, where everyone talked about childhood obesity and I knew nothing could scale; version 0 was a questionnaire for kids I wanted to run at work; the therapy pill early on, around trying to get my own kid support at school; version 1 of HealthQuest; my first win at NASPGHAN Baby Shark Tank; launch Dec 2025. I fought becoming a Filipina nurse and it became my calling. I played tennis. Kapwa matters to me. I wrote the HealthQuest Stories books, starting with one to explain HealthQuest to my daughter.",
+  "- Weekly mix: 2 story posts, 1 Building HealthQuest post, 1 Sunday ad.",
+  "- Privacy: no names, schools or diagnoses for my daughters; nothing internal about my employer; my clinic patients don't use HealthQuest, never imply they do.",
+  "- My closer options: (1) 'I'm April, a pediatric nurse practitioner and mom, building HealthQuest one story at a time. Link's in my bio. As always, be kind to others, and love yourself. Until next time!' (2) 'I'm April, just a girl trying to save healthcare up to $19 billion. Follow along, and find HealthQuest in my bio. Be kind to others, and love yourself. Until next time!' (3) 'I'm April. Part 2 is next. Be kind to others, and love yourself.'"
+].join("\n");
+const FMT_LIST = () => Object.values(FMTS).map(f => f[0]).join("; ");
+const RULES = "Rules: write in my voice. Plain words, contractions, short and varied sentences, no marketing polish, no stock phrases. Don't invent any fact, number, name, date or event about my life; where a detail is missing, write [ASK APRIL: ...]. Never call HealthQuest an app; never say download or install. Any health fact needs a source from AAP/HealthyChildren, NASPGHAN/GIKids, NAMI, NEDA, CDC or WHO; my own experience doesn't. Money claims say 'up to $19 billion'. Storytelling: I'm the main character; every post carries my perspective or opinion, not just facts (story = topic + perspective); talk to one person, so use 'you' more than 'I'; don't only teach, only sell or only show expertise; on-screen text short enough to read at a glance (about 6 words a line), never rushed.";
+function stInputs(){
+  const t = $("stType").value, h = $("stHookType").value;
+  return {
+    type: t === "auto" ? `Pick the best fit from: ${Object.values(TOPICS).join("; ")}` : TOPICS[t],
+    hookType: h === "auto" ? `Pick the best fit from: ${Object.entries(HOOK_NAME).map(([k, v]) => `${v} (${HOOK_WHY[k]})`).join(" | ")}` : `${HOOK_NAME[h]} (${HOOK_WHY[h]})`,
+    hook: $("stHook").value.trim(), story: $("stBeats").value.trim(), isAd: t === "ad"
+  };
+}
+function claudePrompt(){
+  const x = stInputs();
+  if (x.isAd) return [STORY_CONTEXT, "", RULES, "No testimonials and nothing implying my clinic patients use HealthQuest.", "",
+    "Write a HealthQuest ad for an off day.", `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "", x.story ? `What it's about, in my words:\n${x.story}` : "", "",
+    "Give me 2 versions (A and B to test). For each:",
+    `- Best format from this list and why, in one line: ${FMT_LIST()}`,
+    "- The hook in the first 2 seconds (on screen + spoken)",
+    "- The spoken script, line by line, 15 to 30 seconds out loud, marking scene changes",
+    "- What's on screen in each scene (my face, a HealthQuest screen recording, a book, etc.)",
+    "- One clear call to action (for example: the first quest is free, link in my bio)",
+    "- A short caption (40 to 80 words) with #PediatricNursePractitioner",
+    "- Questions for me about anything you had to guess"].filter(Boolean).join("\n");
+  return [STORY_CONTEXT, "", RULES, "",
+    "Plan my next @pnphealthdecoder story post.", "",
+    "What I want this post to tell or answer, in my words:", x.story || "(nothing yet; ask me the 3 questions you need answered first)", "",
+    `Story type: ${x.type}`, `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "My hook: not written yet.", "",
+    "Give me, in this order:",
+    "1. The story type and hook type you'd use, and one line on why.",
+    `2. The best format from this list, and one line on why: ${FMT_LIST()}`,
+    "3. Three hook options for the first 2 seconds (on screen and spoken), in my voice. If I gave a hook, tighten mine as option 1.",
+    "4. The story in 4 beats: hook, what happened, one health lesson (if it has one), 'that's why HealthQuest...'.",
+    "5. Scenes: what I do and what's on screen in each.",
+    "6. The spoken script: exactly what I say, line by line, 20 to 45 seconds out loud, scene changes marked.",
+    "7. On-screen line 1 and line 2 (two lines max).",
+    "8. A caption of 130 to 155 words before the closer, with [CLOSER] where my closer goes, the source if there's a health fact, and five hashtags including #PediatricNursePractitioner.",
+    "9. What to record or dig up (photos, clips, screenshots) so I can reuse it in other posts.",
+    "10. Questions for me about anything you had to guess."].join("\n");
+}
+function ideasPrompt(){
+  const x = stInputs();
+  return [STORY_CONTEXT, "", RULES, "",
+    `Story type: ${x.type}`, `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "", x.story ? `What I want to tell, in my words:\n${x.story}` : "", "",
+    "Give me 3 different reel ideas. For each:",
+    "- The on-screen one-liner (first 2 seconds)",
+    `- The best format from this list, and one line on why: ${FMT_LIST()}`,
+    "- 3 to 5 scenes: what I do, what I say (short), what's on screen",
+    "- The one health lesson inside it, if it has one",
+    "- What I need to record or dig up, so I can reuse it",
+    "- Questions you need me to answer first",
+    x.isAd ? "These are ads: each needs the HealthQuest feature on screen and one call to action (link in bio, first quest free)." : "",
+    "Keep each idea tight."].filter(Boolean).join("\n");
+}
+function writePrompt(){ return claudePrompt(); }
+let clCtl = null;
+async function askClaude(prompt){
+  const sample = await window.claude.use("sample"); if (!sample) return;
+  clCtl = new AbortController(); const out = $("clOut"); $("clOutWrap").hidden = false; out.textContent = "Thinking…";
+  $("clStop").hidden = false; $("clIdeas").disabled = $("clWrite").disabled = true;
+  try { const r = await sample(prompt, {signal: clCtl.signal, modelTier: "default", onText: ({text}) => { out.textContent = text; }}); out.textContent = r.text + (r.truncated ? "\n\n(Cut off. Ask again for the rest.)" : ""); }
+  catch(e){ if (e && e.code === "not_granted"){ $("clLive").hidden = true; out.textContent = "Claude access wasn't allowed, so use \"Copy prompt and open Claude\" instead."; }
+    else if (e && e.code === "rate_limited"){ out.textContent = (e.text || "") + "\n\nClaude is busy. Wait a minute and try again."; }
+    else if (e && e.name === "AbortError"){ /* stopped */ } else { out.textContent = (e && e.text ? e.text + "\n\n" : "") + "Something went wrong. Try again, or use \"Copy prompt and open Claude\"."; } }
+  finally { $("clStop").hidden = true; $("clIdeas").disabled = $("clWrite").disabled = false; clCtl = null; }
+}
+$("clIdeas").addEventListener("click", () => askClaude(ideasPrompt()));
+$("clWrite").addEventListener("click", () => askClaude(writePrompt()));
+$("clStop").addEventListener("click", () => { if (clCtl) clCtl.abort(); });
+$("clOutCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("clOut").textContent); $("clMsg").textContent = "Copied Claude's answer."; } catch(e){ $("clMsg").textContent = "Select the text and copy it."; } });
+if (window.claude && window.claude.use) window.claude.use("sample").then(s => { if (s){ $("clLive").hidden = false; $("clLiveNote").hidden = false; } }).catch(() => {});
+$("clCopy").addEventListener("click", async () => {
+  const txt = claudePrompt(); let ok = true;
+  try { await navigator.clipboard.writeText(txt); } catch(e){ ok = false; }
+  window.open("https://claude.ai/new", "_blank", "noopener");
+  $("clMsg").textContent = ok ? "Copied. Paste it into Claude." : "Couldn't copy automatically. Select the prompt from the hook box area and copy it.";
+  if (!ok){ $("stBeats").value = txt; $("stBeats").select(); }
+});
+$("hkTpl").addEventListener("change", e => { $("hkText").placeholder = HOOKS[P.hkFam][+e.target.value] + "  (say it your way)"; $("hkText").focus(); });
 $("hkCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("hkText").value); $("hkMsg").textContent = "Copied."; } catch(e){ $("hkText").select(); $("hkMsg").textContent = "Press Cmd+C to copy."; } });
 $("hkUse").addEventListener("click", () => {
   const fmt = ["prompter","scenes","green"].includes(S.format) ? S.format : "prompter", hook = $("hkText").value.trim(); if (!hook) return;
@@ -2746,7 +2868,9 @@ $("lgCsvIn").addEventListener("change", async e => { const f = e.target.files[0]
   for (const r of rows){ const o = {}; hd.forEach((h, i) => { if (LOGF.includes(h)) o[h] = ["views","likes","comments","shares","saves","follows"].includes(h) ? (r[i] === "" || r[i] == null ? "" : +r[i]) : (r[i] || ""); });
     if (o.at && o.plat && !seen.has(o.at + o.plat)){ P.log.push(o); seen.add(o.at + o.plat); n++; } }
   pSave(); $("lgMsg").textContent = `Loaded ${n} post${n === 1 ? "" : "s"}.`; e.target.value = ""; pRender(); });
-fillSel($("lgFmt"), FMTS); fillSel($("lgTopic"), TOPICS);
+fillSel($("lgFmt"), FMTS); fillSel($("lgTopic"), TOPICS); fillSel($("pTopic"), TOPICS); fillSel($("hkFam"), HOOK_NAME);
+for (const [id, obj] of [["stType", TOPICS], ["stHookType", HOOK_NAME]]){ const sel = $(id); sel.append(new Option("Let Claude pick", "auto")); for (const k in obj) sel.append(new Option(obj[k], k)); }
+for (const k in HOOK_NAME){ const o = document.createElement("option"); o.value = k; o.textContent = HOOK_NAME[k]; $("lgHook").append(o); }
 { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $("lgAt").value = d.toISOString().slice(0, 16); }
 renderAct(); renderHook(); chipOnly(); setInterval(chipOnly, 5*60e3);
 
@@ -2760,6 +2884,7 @@ renderSaved();
 if (S.projectId && window.indexedDB) openProject(S.projectId, true);   // bring your saved videos back after a reload
 requestAnimationFrame(tick);
 getDownloads();
+P.tab = "fmt"; openPlanner(true);   // Prep is the first screen
 })();
 </script>
 
