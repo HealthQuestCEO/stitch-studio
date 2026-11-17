@@ -157,6 +157,38 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
 .legend span{display:inline-flex;gap:6px;align-items:center}
 .swatch{width:10px;height:10px;border-radius:3px;display:inline-block}
 #result{width:min(100%,260px);border-radius:10px;background:#000}
+/* post planner */
+#planner{display:flex;flex-direction:column;gap:14px;max-width:880px;width:100%}
+.pTabs{display:flex;gap:6px;flex-wrap:wrap}
+.pTabs .btn.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.pGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.nowBox{border-radius:10px;padding:12px 14px;border:1px solid var(--line);background:var(--field)}
+.nowBox b{font-family:var(--f-display);font-size:18px;display:block}
+.nowBox.go{border-color:var(--ok);box-shadow:inset 4px 0 0 var(--ok)} .nowBox.wait{border-color:var(--warn);box-shadow:inset 4px 0 0 var(--warn)}
+.heat{display:grid;grid-template-columns:38px repeat(24,minmax(0,1fr));gap:2px;font:500 10px var(--f-mono);color:var(--muted)}
+.heat .c{aspect-ratio:1/1.3;border-radius:3px;background:var(--field)}
+.heat .c.now{outline:2px solid var(--fg);outline-offset:-1px}
+.heat .d{display:flex;align-items:center}
+.heat .h{text-align:left;white-space:nowrap;overflow:visible}
+.pPlan,.pRank{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.pRank li b{font-family:var(--f-display)}
+.pRank .why{display:block;font-size:13px;color:var(--muted)}
+.score{font:500 12px var(--f-mono);color:var(--accent);margin-left:6px}
+.act{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}
+#actD{grid-template-columns:repeat(7,minmax(0,1fr))}
+.act label{display:flex;flex-direction:column;gap:2px;font:500 11px var(--f-mono);color:var(--muted)}
+.act input{padding:5px;text-align:center}
+.pForm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pForm label{display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:600;color:var(--muted)}
+.pForm .full{grid-column:1/-1}
+.pForm input,.pForm select{padding:6px;font-size:14px}
+input[type=datetime-local]{background:var(--field);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px;font:14px var(--f-body);min-width:0}
+.tblWrap{overflow-x:auto}
+.pTbl{border-collapse:collapse;width:100%;font-size:13px}
+.pTbl th,.pTbl td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;white-space:nowrap}
+.pTbl td.n{font-family:var(--f-mono);text-align:right}
+details.subhead summary{cursor:pointer}
+@media (max-width:600px){.pForm{grid-template-columns:1fr 1fr}.heat{font-size:8px;grid-template-columns:26px repeat(24,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -166,10 +198,96 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
   <header>
     <h1>Stitch Studio</h1>
     <span class="tally" id="tally"><i></i><span id="tallyTxt">Standby</span></span>
+    <span class="row" style="margin-left:auto"><button class="btn sm" id="nowChip" title="Open the post planner"></button><button class="btn sm" id="plannerBtn">Post planner</button></span>
     <p class="sub">Pick a format and it walks you through each step. Everything exports as a 1080×1920 video with sound, keeping text inside the Reels/TikTok/Shorts safe zone.</p>
   </header>
 
-  <div class="grid">
+  <!-- POST PLANNER: when to post, which format and hook, and a log that teaches it -->
+  <div id="planner" hidden>
+    <div class="pTabs" role="tablist">
+      <button class="btn sm" data-ptab="when" role="tab">When to post</button>
+      <button class="btn sm" data-ptab="fmt" role="tab">Format &amp; hook</button>
+      <button class="btn sm" data-ptab="log" role="tab">Post log</button>
+    </div>
+
+    <section class="step" data-ptab-panel="when">
+      <div class="nowBox" id="nowBox"></div>
+      <div class="pGrid">
+        <div class="field"><label class="lbl" for="pPlat">Platform</label>
+          <select id="pPlat"><option value="ig">Instagram Reels</option><option value="fb">Facebook Reels</option><option value="tt">TikTok</option><option value="yt">YouTube Shorts</option></select></div>
+        <div class="field"><label class="lbl" for="pPer">Posts per week</label>
+          <input type="number" id="pPer" min="1" max="7" step="1"></div>
+      </div>
+      <p class="note" id="pConf"></p>
+      <div class="heat" id="heat" aria-label="Posting score by day and hour"></div>
+      <div class="legend"><span><i class="swatch" style="background:color-mix(in srgb,var(--accent) 15%,var(--field))"></i>Weaker</span><span><i class="swatch" style="background:var(--accent)"></i>Stronger</span><span>Times are your computer's clock (Central).</span></div>
+      <div class="subhead"><span class="lbl">Your next posts</span><ol class="pPlan" id="pPlan"></ol></div>
+      <details class="subhead"><summary class="lbl">Add your Instagram "Most active times" (makes this yours)</summary>
+        <p class="note">In Instagram: Professional dashboard → Total followers → Most active times. Give each bar a rough height from 0 to 10. Hours first, then days. Facebook's Meta Business Suite has the same chart under Audience.</p>
+        <span class="lbl">Hours</span><div class="act" id="actH"></div>
+        <span class="lbl">Days</span><div class="act" id="actD"></div>
+        <div class="row"><button class="btn sm" id="actClear">Clear</button></div>
+      </details>
+      <details class="subhead"><summary class="lbl">How this is scored</summary>
+        <p class="note">Each hour gets a score from three layers, multiplied together:</p>
+        <p class="note"><b>1. Benchmarks.</b> Sprout Social's 2026 study (about 2 billion engagements, 307,000 profiles, local time): Instagram Mon 2–4pm, Tue 1–7pm, Wed 12–9pm (plus 11pm), Thu 12–2pm; Facebook Tue and Wed 12–8pm, Mon 12–1pm, with Mon and Thu afternoon spikes; TikTok Mon 3–5pm, Tue 2–6pm, Wed 1–8pm, Thu 1–5pm, Fri 3–5pm, weekends weak. Health and wellness windows from Emulent's 2026 industry table: Instagram Tue–Wed 1–7pm, Facebook Mon–Wed 10am–12pm, TikTok Wed 11am–7pm. YouTube Shorts has no platform study loaded here, so it uses Sprout's overall Tue–Wed 11am–6pm.</p>
+        <p class="note"><b>2. Your audience.</b> If you enter your Most active times, they count for about two thirds of the score.</p>
+        <p class="note"><b>3. Your results.</b> Every post you log is compared with your typical post on that platform. Times of day and days of the week that beat your typical post move up, ones that lag move down. Each needs a few posts before it moves much, so one lucky post can't take over.</p>
+        <p class="note">ReelTrends doesn't publish how it picks times, so this doesn't copy it. It works the way the published methods do: audience activity plus your own results.</p>
+      </details>
+    </section>
+
+    <section class="step" data-ptab-panel="fmt" hidden>
+      <div class="field"><label class="lbl" for="pTopic">What's this post about?</label>
+        <select id="pTopic">
+          <option value="myth">Myth or fact</option>
+          <option value="explain">Explain a test, label or body thing (like I'm 10)</option>
+          <option value="tip">Quick how-to tip for parents</option>
+          <option value="story">Clinic story (no identifying details)</option>
+          <option value="react">Responding to a claim or trend</option>
+          <option value="promo">Book, giveaway or HealthQuest feature</option>
+        </select></div>
+      <p class="note" id="fmtConf"></p>
+      <ol class="pRank" id="fmtRank"></ol>
+      <div class="subhead"><span class="lbl">Hook</span>
+        <div class="pGrid">
+          <div class="field"><label class="lbl" for="hkFam">Hook type</label>
+            <select id="hkFam"><option value="experience">Experience</option><option value="contrast">Contrast</option><option value="curiosity">Curiosity</option><option value="proof">Proof</option></select></div>
+          <div class="field"><label class="lbl" for="hkTpl">Starter</label><select id="hkTpl"></select></div>
+        </div>
+        <p class="note" id="hkWhy"></p>
+        <textarea id="hkText" style="min-height:90px" aria-label="Your hook"></textarea>
+        <p class="note warn" id="hkWarn" hidden>Proof hooks need a real study, guideline or number you can cite. Leave this one out if you don't have the source in hand.</p>
+        <div class="row"><button class="btn sm primary" id="hkUse">Put it at the top of my words</button><button class="btn sm" id="hkCopy">Copy</button><span class="note" id="hkMsg" role="status"></span></div>
+        <p class="note">Fill in the [brackets]. Your sign-off still goes at the end as always.</p>
+      </div>
+    </section>
+
+    <section class="step" data-ptab-panel="log" hidden>
+      <p class="lead">Log each post about 2 days after it goes up. This is what teaches the planner your audience.</p>
+      <div class="pForm">
+        <label>Posted<input type="datetime-local" id="lgAt"></label>
+        <label>Platform<select id="lgPlat"><option value="ig">Instagram</option><option value="fb">Facebook</option><option value="tt">TikTok</option><option value="yt">YouTube Shorts</option></select></label>
+        <label>Format<select id="lgFmt"></select></label>
+        <label>Hook<select id="lgHook"><option value="">Not sure</option><option value="experience">Experience</option><option value="contrast">Contrast</option><option value="curiosity">Curiosity</option><option value="proof">Proof</option></select></label>
+        <label>Topic<select id="lgTopic"></select></label>
+        <label>Views<input type="number" id="lgViews" min="0"></label>
+        <label>Likes<input type="number" id="lgLikes" min="0"></label>
+        <label>Comments<input type="number" id="lgComments" min="0"></label>
+        <label>Shares<input type="number" id="lgShares" min="0"></label>
+        <label>Saves<input type="number" id="lgSaves" min="0"></label>
+        <label>Follows<input type="number" id="lgFollows" min="0"></label>
+        <label class="full">Note<input type="text" id="lgNote" placeholder="Title or anything that stood out"></label>
+      </div>
+      <div class="row"><button class="btn primary" id="lgAdd">Add to log</button><span class="note" id="lgMsg" role="status"></span></div>
+      <div class="field"><label class="lbl" for="lgMetric">Judge posts by</label>
+        <select id="lgMetric"><option value="views">Views</option><option value="eng">Engagement (comments, shares and saves count extra)</option><option value="follows">Follows</option></select></div>
+      <div class="tblWrap"><table class="pTbl" id="lgTbl"></table></div>
+      <div class="row"><button class="btn sm" id="lgCsv">Download CSV</button><span class="btn sm file">Load CSV<input type="file" id="lgCsvIn" accept=".csv,text/csv"></span><span class="note">The log is saved in this browser.</span></div>
+    </section>
+  </div>
+
+  <div class="grid" id="studio">
     <div class="rail">
       <div class="wiz" id="wiz" hidden>
         <div class="wizTop"><div><span class="lbl">Format</span><b id="fmtName"></b></div>
@@ -194,6 +312,9 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
           <button class="card" data-fmt="green">
             <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="9" width="22" height="3" rx="1.5" fill="currentColor" opacity=".35"/><rect x="6" y="15" width="22" height="3" rx="1.5" fill="currentColor" opacity=".35"/><circle cx="17" cy="30" r="5" fill="var(--accent)"/><path d="M8 51 q9-16 18 0" fill="var(--accent)"/></svg>
             <b>Green screen</b><span>You in front of a new background: a photo, a video, or words behind you.</span></button>
+          <button class="card" data-fmt="explain">
+            <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="8" width="20" height="3" rx="1.5" fill="currentColor"/><rect x="7" y="15" width="20" height="11" rx="2" fill="currentColor" opacity=".35"/><rect x="9" y="30" width="16" height="4" rx="2" fill="var(--accent)"/><rect x="11" y="37" width="12" height="4" rx="2" fill="var(--accent)" opacity=".7"/><path d="M26 2 l5 3" stroke="var(--accent)" stroke-width="2"/></svg>
+            <b>Explainer cards</b><span>No camera. Your voiceover over animated cards: headlines, screenshots, pop-in tags, a count-up number.</span></button>
         </div>
         <p class="note">You can switch formats any time. Your words and settings for each format are kept.</p>
         <div class="subhead" id="savedWrap" hidden>
@@ -394,6 +515,16 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
           <div class="slider"><label class="lbl" for="fgX">Left / right</label><output id="fgXOut"></output><input type="range" id="fgX" min="-0.5" max="0.5" step="0.01"></div>
           <div class="slider"><label class="lbl" for="fgY">Up / down</label><output id="fgYOut"></output><input type="range" id="fgY" min="-0.5" max="0.5" step="0.01"></div>
         </div>
+        <div class="field"><label class="lbl" for="fx">Effect</label>
+          <select id="fx">
+            <option value="none">None, just you</option>
+            <option value="mirror">Mirror twin: two of you facing each other</option>
+            <option value="sliced">Sliced: you split into strips that snap together</option>
+            <option value="bigsmall">Big and small: you jump between huge and tiny</option>
+            <option value="silhouette">Inside the head: your outline filled with the background</option>
+          </select>
+          <p class="note" id="fxNote"></p></div>
+        <div class="slider" id="fxEveryWrap"><label class="lbl" for="fxEvery">Change every</label><output id="fxEveryOut"></output><input type="range" id="fxEvery" min="0.5" max="6" step="0.25"></div>
         <div class="two">
           <div class="field"><label class="lbl" for="fgS">Start at (sec)</label><input type="number" id="fgS" min="0" step="0.1"></div>
           <div class="field"><label class="lbl" for="fgE">End at (sec)</label><input type="number" id="fgE" min="0" step="0.1"></div>
@@ -470,6 +601,40 @@ code{font:500 12.5px var(--f-mono);background:var(--field);border:1px solid var(
         <ul class="caps" id="caps"></ul>
       </section>
 
+      <!-- CARDS (explainer) -->
+      <section class="step" data-panel="cards" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">One card per beat of your voiceover. Each card can have a headline, a screenshot or photo, pop-in tags and a big number that counts up. End with a comment-keyword card and a follow card.</p>
+        <div class="row"><select id="exKind" aria-label="Card type" style="width:auto;flex:1"><option value="card">Headline card</option><option value="keyword">Comment keyword</option><option value="follow">Follow</option></select><button class="btn sm primary" id="exAdd">Add card</button></div>
+        <ul class="caps" id="exList"></ul>
+        <p class="note">Wrap words in <code>*stars*</code> to make them the accent color. Separate tags with commas.</p>
+      </section>
+
+      <!-- EXPLAINER LOOK -->
+      <section class="step" data-panel="exlook" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <div class="field"><span class="lbl">Background</span>
+          <div class="seg" role="radiogroup" aria-label="Background">
+            <label><input type="radio" name="exTheme" value="paper">Paper</label>
+            <label><input type="radio" name="exTheme" value="dark">Dark</label>
+            <label><input type="radio" name="exTheme" value="bold">Solid color</label>
+          </div></div>
+        <div class="row"><span class="lbl">Accent</span><input type="color" id="exAccent" aria-label="Accent color"><span class="lbl" id="exBgLbl">Background</span><input type="color" id="exBg" aria-label="Background color"></div>
+        <div class="field"><label class="lbl" for="exFont">Font</label>
+          <select id="exFont"><option value="figtree">Figtree</option><option value="poppins">Poppins</option><option value="montserrat">Montserrat</option><option value="archivo">Archivo</option><option value="bricolage">Bricolage Grotesque</option></select></div>
+        <label class="note" style="color:var(--fg)"><input type="checkbox" id="exSwoosh"> Accent swoosh in the corner</label>
+      </section>
+
+      <!-- VOICEOVER (explainer) -->
+      <section class="step" data-panel="voice" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Upload your voiceover: a voice memo, an audio file, or a video (only its sound is used). Then match the cards to it.</p>
+        <div class="row"><span class="btn file">Upload voiceover<input type="file" id="voIn" accept="audio/*,video/*"></span><span class="meta" id="voMeta">No voiceover yet</span></div>
+        <div class="row"><button class="btn sm" id="voFit">Stretch cards to fit the voiceover</button><button class="btn sm" id="voClear">Remove</button></div>
+        <p class="note" id="voNote">Or set each card's length to match when you say it: scrub to the moment the next point starts and use <b>Ends here</b> on the card before it.</p>
+        <div class="slider"><label class="lbl" for="voVol">Voiceover volume</label><output id="voVolOut"></output><input type="range" id="voVol" min="0" max="1.5" step="0.05"></div>
+      </section>
+
       <!-- EXPORT -->
       <section class="step" data-panel="export" hidden>
         <h2><b class="num"></b><span class="ttl"></span></h2>
@@ -519,7 +684,8 @@ const IMG_RE = /^\[image:\s*(.+?)\s*\]$/i;
 const FORMATS = {
   prompter:{name:"Teleprompter", steps:[["clips","Upload your swipe clip"],["words","Add your words"],["look","Choose the look"],["sync","Set the timing"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
   scenes:  {name:"Scene swipes", steps:[["clips","Upload your scene clips"],["words","Words for each scene"],["look","Choose the look"],["place","Placement and entrance"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
-  react:   {name:"React & respond", steps:[["reactA","What you're reacting to"],["reactB","Your response"],["layout","Pick the layout"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
+  react:   {explain:2, name:"React & respond", steps:[["reactA","What you're reacting to"],["reactB","Your response"],["layout","Pick the layout"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
+  explain: {explain:4, name:"Explainer cards", steps:[["cards","Build your cards"],["exlook","Choose the look"],["voice","Add your voiceover"],["captions","Add captions"],["export","Export"]]},
   green:   {name:"Green screen", steps:[["fg","Upload your green-screen video"],["bg","Choose your background"],["words","Words behind you"],["look","Choose the look"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
 };
 const SAMPLES = {
@@ -533,7 +699,7 @@ const S = {
   sync:"motion", fit:"fit", travel:1, minMove:0.6, end:"exit", pos:"middle", sceneIn:"type", clipVol:1,
   font:"figtree", weight:"semi", em:"color", emCol:"#ffd54a", style:"shadow", align:"center", size:72, leading:1.35, imgScale:0.8,
   layout:"pip", timing:"seq", corner:"tl", volA:1, volB:1, credit:"",
-  keyMode:"color", keyCol:"#00ff00", keySim:0.4, keySmooth:0.08, keySpill:0.1, fgScale:1, fgX:0, fgY:0, fgVol:1,
+  keyMode:"color", keyCol:"#00ff00", keySim:0.4, keySmooth:0.08, keySpill:0.1, fgScale:1, fgX:0, fgY:0, fgVol:1, fx:"none", fxEvery:2,
   bgType:"color", bgCol1:"#1f3b5c", bgCol2:"#3a1f4f", bgVol:0.3, bgDim:0, behind:"scroll", gpos:"top",
   caps:{
     prompter:[], scenes:[],
@@ -543,6 +709,12 @@ const S = {
     green:[{text:"MYTH", t0:0.6, t1:2.4, pos:"bottom", style:"stamp", anim:"pop"}]
   },
   broll:{prompter:[], scenes:[], react:[], green:[]},
+  ex:{theme:"paper", accent:"#e2603a", bg:"#1f3b5c", font:"figtree", swoosh:true, voVol:1, cards:[
+    {kind:"card", title:"3 things on a *food label* most parents skip", dur:3},
+    {kind:"card", title:"#1 *Added sugars*", pills:"It's its own line, Look at the grams, Not the same as total sugars", dur:4},
+    {kind:"card", title:"Daily added sugar limit for kids 2 to 18", big:"25 g", sub:"American Heart Association", dur:4},
+    {kind:"keyword", title:"Comment", word:"LABEL", sub:"and I'll send you the checklist", dur:3.5},
+    {kind:"follow", title:"FOLLOW", sub:"@pnphealthdecoder", dur:2.5}]},
   notifs:{prompter:[], scenes:[], react:[], green:[]},
   seriesOn:false, seriesText:"", seriesCorner:"tl", seriesX:null, seriesY:null,
   projectId:null, projName:"",
@@ -550,7 +722,7 @@ const S = {
 };
 try { const sv = JSON.parse(localStorage.getItem(STORE) || "null");
   if (sv) for (const k of Object.keys(S)) if (k in sv){
-    if (k === "words" || k === "caps" || k === "broll" || k === "notifs") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
+    if (k === "words" || k === "caps" || k === "broll" || k === "notifs" || k === "ex") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
 delete S.caps["null"]; delete S.broll["null"]; delete S.notifs["null"];
 function persist(){ try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){} if (typeof Rt !== "undefined" && !Rt.restoring){ Rt.unsaved = true; saveLabel(); } }
 const Rt = {T:0, playing:false, exporting:false, analyzing:0, dirty:true, unsaved:false, saving:false, restoring:false};
@@ -1187,23 +1359,65 @@ const keyer = (() => {
   };
 })();
 const grDur = () => GR.fg ? Math.max(0.1, GR.fg.end - GR.fg.start) : 8;
-function grPlace(sw, sh){ const s0 = Math.max(W/sw, H/sh)*S.fgScale, w = sw*s0, h = sh*s0; return {x:(W - w)/2 + S.fgX*W, y:(H - h)/2 + S.fgY*H, w, h}; }
-function grDemoPerson(ctx, T){
-  const r = grPlace(W, H), s = r.w/W, cx = r.x + r.w/2, cy = r.y + r.h/2, bob = Math.sin(T*2.2)*8*s;
+function grPlace(sw, sh, m){ const s0 = Math.max(W/sw, H/sh)*S.fgScale*(m || 1), w = sw*s0, h = sh*s0; return {x:(W - w)/2 + S.fgX*W, y:(H - h)/2 + S.fgY*H, w, h}; }
+function grDemoPerson(ctx, T, r0){
+  const r = r0 || grPlace(W, H), s = r.w/W, cx = r.x + r.w/2, cy = r.y + r.h/2, bob = Math.sin(T*2.2)*8*s;
   ctx.save(); ctx.fillStyle = "#e9c3a6";
   ctx.beginPath(); ctx.arc(cx, cy - 260*s + bob, 150*s, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = "#2d6a8e"; ctx.beginPath(); ctx.ellipse(cx, cy + 420*s + bob, 360*s, 460*s, 0, Math.PI, 0); ctx.fillRect(cx - 360*s, cy + 420*s + bob - 1, 720*s, 600*s); ctx.fill();
   ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.font = `700 ${Math.round(34*s)}px Figtree, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText("SAMPLE · YOU", cx, cy + 640*s + bob); ctx.restore();
 }
+function grBg(ctx){
+  if (S.bgType === "image" && GR.bgImg) coverInto(ctx, GR.bgImg, GR.bgImg.naturalWidth, GR.bgImg.naturalHeight, 0, 0, W, H);
+  else if (S.bgType === "video" && GR.bgVid && GR.bgVid.readyState >= 2) coverVid(ctx, GR.bgVid, 0, 0, W, H);
+  else { const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0, S.bgCol1); g.addColorStop(1, S.bgCol2); ctx.fillStyle = g; ctx.fillRect(0,0,W,H); }
+}
+const FXC = {};
+function fxCanvas(k){ if (!FXC[k]){ const cv = document.createElement("canvas"); cv.width = W; cv.height = H; FXC[k] = {cv, ctx: cv.getContext("2d")}; } return FXC[k]; }
+/* Draws you with the chosen effect. keyed = the background is already removed, so effects that need your outline can run. */
+function grYou(ctx, src, sw, sh, T, keyed){
+  const fx = keyed ? S.fx : "none", every = Math.max(0.5, S.fxEvery || 2);
+  if (fx === "mirror"){
+    const r = grPlace(sw, sh, 0.82), off = W*0.2;
+    ctx.drawImage(src, r.x - off, r.y, r.w, r.h);
+    ctx.save(); ctx.translate(r.x + off + r.w, r.y); ctx.scale(-1, 1); ctx.drawImage(src, 0, 0, r.w, r.h); ctx.restore(); return;
+  }
+  if (fx === "bigsmall"){
+    const k = Math.floor(T/every), q = ease(clamp((T - k*every)/0.35, 0, 1)), big = 1.25, small = 0.45;
+    const from = k === 0 ? 1 : (k % 2 ? 1 : small), to = k % 2 ? small : big;
+    const m = k === 0 ? 1 : from + (to - from)*q, r = grPlace(sw, sh, m);
+    ctx.drawImage(src, r.x, r.y + (1 - m)*H*0.18, r.w, r.h); return;
+  }
+  if (fx === "sliced"){
+    const r = grPlace(sw, sh), n = 5, ph = (T % every)/every, q = ease(clamp(ph/0.3, 0, 1)), gap = (1 - q)*18;
+    for (let i = 0; i < n; i++){
+      const sx = sw*i/n, sW = sw/n, dx = r.x + r.w*i/n, dW = r.w/n, dir = i % 2 ? 1 : -1, dy = dir*(1 - q)*H*0.09;
+      ctx.drawImage(src, sx, 0, sW, sh, dx + (i - (n - 1)/2)*gap, r.y + dy, dW, r.h);
+    }
+    return;
+  }
+  if (fx === "silhouette"){
+    const r = grPlace(sw, sh), t = fxCanvas("sil");
+    t.ctx.globalCompositeOperation = "source-over"; t.ctx.clearRect(0, 0, W, H); t.ctx.drawImage(src, r.x, r.y, r.w, r.h);
+    t.ctx.globalCompositeOperation = "source-in"; grBg(t.ctx); t.ctx.globalCompositeOperation = "source-over";
+    ctx.save(); ctx.shadowColor = "rgba(255,255,255,.35)"; ctx.shadowBlur = 24; ctx.drawImage(t.cv, 0, 0); ctx.restore(); return;
+  }
+  const r = grPlace(sw, sh); ctx.drawImage(src, r.x, r.y, r.w, r.h);
+}
+const FX_NOTES = {
+  none: "",
+  mirror: "Good for a back-and-forth: Myth you vs. Fact you. Film yourself turned a little to one side.",
+  sliced: "Your strips pull apart and snap back together on a beat. Good for a reveal.",
+  bigsmall: "You shrink small, then pop up huge. Good for \"small habit, big difference.\"",
+  silhouette: "Pick a photo or video background in the next step. It plays inside your outline. Good for \"what's going on inside your kid's body.\"",
+};
 const GREEN = {
   total: grDur,
   render(ctx, T){
-    // 1. background
-    if (S.bgType === "image" && GR.bgImg) coverInto(ctx, GR.bgImg, GR.bgImg.naturalWidth, GR.bgImg.naturalHeight, 0, 0, W, H);
-    else if (S.bgType === "video" && GR.bgVid && GR.bgVid.readyState >= 2) coverVid(ctx, GR.bgVid, 0, 0, W, H);
-    else { const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0, S.bgCol1); g.addColorStop(1, S.bgCol2); ctx.fillStyle = g; ctx.fillRect(0,0,W,H); }
-    if (S.bgDim > 0){ ctx.fillStyle = `rgba(0,0,0,${S.bgDim})`; ctx.fillRect(0,0,W,H); }
+    // 1. background (Inside the head puts the background inside you, so the frame goes dark)
+    if (S.fx === "silhouette"){ ctx.fillStyle = "#0b0c10"; ctx.fillRect(0,0,W,H); }
+    else { grBg(ctx); if (S.bgDim > 0){ ctx.fillStyle = `rgba(0,0,0,${S.bgDim})`; ctx.fillRect(0,0,W,H); } }
     // 2. words behind
     if (S.behind !== "none"){
       const text = (S.words.green || "").replace(/^\s*-{3,}\s*$/mg, ""), L = layoutFor(text);
@@ -1211,11 +1425,15 @@ const GREEN = {
       else drawWords(ctx, L, {top: startTop(L) - clamp(T/grDur(), 0, 1)*travelDist(L, "exit"), fade:true});
     }
     // 3. you
-    if (!GR.fg) return grDemoPerson(ctx, T);
+    if (!GR.fg){
+      if (S.fx === "none") return grDemoPerson(ctx, T);
+      const d = fxCanvas("demo"); d.ctx.clearRect(0,0,W,H); grDemoPerson(d.ctx, T, {x:0, y:0, w:W, h:H});
+      return grYou(ctx, d.cv, W, H, T, true);
+    }
     const v = GR.fg.video; if (v.readyState < 2) return;
     const out = keyer.process(v);
-    if (out){ const r = grPlace(out.width, out.height); ctx.drawImage(out, r.x, r.y, r.w, r.h); }
-    else { const r = grPlace(v.videoWidth, v.videoHeight); ctx.drawImage(v, r.x, r.y, r.w, r.h); }
+    if (out) grYou(ctx, out, out.width, out.height, T, true);
+    else grYou(ctx, v, v.videoWidth, v.videoHeight, T, false);
   },
   sync(playing){
     if (GR.fg) playSync(GR.fg.video, GR.fg.start + clamp(Rt.T, 0, grDur()), playing && Rt.T < grDur(), 0.3);
@@ -1244,7 +1462,152 @@ async function loadFg(file){
   stop(); Rt.T = 0; syncUI(); renderCaps(); changed();
 }
 
-const MODS = {prompter:SWIPE, scenes:SWIPE, react:REACT, green:GREEN};
+/* =============== explainer cards (faceless) =============== */
+const EX = {vo:null, voFile:null};
+const exCards = () => S.ex.cards;
+function exTimes(){ let a = 0; return exCards().map(c => { const t0 = a; a += Math.max(0.5, +c.dur || 3); return [t0, a]; }); }
+const exTotal = () => { const t = exTimes(); return t.length ? t[t.length-1][1] : 3; };
+function exLocate(T){ const ts = exTimes(); for (let i = 0; i < ts.length; i++) if (T < ts[i][1] || i === ts.length - 1) return {i, lt: Math.max(0, T - ts[i][0]), d: ts[i][1] - ts[i][0]}; return {i:-1, lt:0, d:1}; }
+function exFont(w, px, it){ const f = FONTS[S.ex.font] || FONTS.figtree; return `${it ? "italic " : ""}${w} ${px}px "${f.fam}", system-ui, sans-serif`; }
+const exInk = () => S.ex.theme === "paper" ? "#16181d" : "#ffffff";
+const exPillBg = () => S.ex.theme === "paper" ? "#ffffff" : "rgba(255,255,255,.12)";
+let exBgCache = null, exBgKey = "";
+function exBackground(ctx){
+  const key = S.ex.theme + S.ex.bg;
+  if (key !== exBgKey){ exBgKey = key; exBgCache = document.createElement("canvas"); exBgCache.width = W; exBgCache.height = H; const c = exBgCache.getContext("2d");
+    c.fillStyle = S.ex.theme === "paper" ? "#f4f1ea" : S.ex.theme === "dark" ? "#111318" : S.ex.bg; c.fillRect(0, 0, W, H);
+    c.fillStyle = S.ex.theme === "paper" ? "rgba(0,0,0,.08)" : "rgba(255,255,255,.07)";
+    for (let y = 18; y < H; y += 40) for (let x = 18; x < W; x += 40){ c.beginPath(); c.arc(x, y, 2.2, 0, Math.PI*2); c.fill(); } }
+  ctx.drawImage(exBgCache, 0, 0);
+  if (S.ex.swoosh){ ctx.save(); ctx.strokeStyle = S.ex.accent; ctx.lineCap = "round"; ctx.lineWidth = 34;
+    ctx.beginPath(); ctx.moveTo(W - 210, 60); ctx.lineTo(W - 40, -20); ctx.stroke(); ctx.lineWidth = 22; ctx.beginPath(); ctx.moveTo(W - 120, 140); ctx.lineTo(W + 20, 70); ctx.stroke(); ctx.restore(); }
+}
+/* headline with *accent* words, wrapped and centered; returns its height */
+function exTitle(ctx, text, y, px, alpha){
+  const words = []; text.split(/\*+/).forEach((p, k) => p.split(/\s+/).filter(Boolean).forEach(w => words.push({w, em: k % 2 === 1})));
+  const maxW = SAFE.right - SAFE.left, lines = [[]]; let lw = 0;
+  const wid = o => { ctx.font = exFont(o.em ? 900 : 800, px, o.em); return ctx.measureText(o.w).width; }, sp = px*0.28;
+  for (const o of words){ const w = wid(o); if (lines[lines.length-1].length && lw + sp + w > maxW){ lines.push([]); lw = 0; } lw += (lines[lines.length-1].length ? sp : 0) + w; lines[lines.length-1].push(o); }
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.textBaseline = "top";
+  lines.forEach((ln, i) => { const tw = ln.reduce((a, o, k) => a + wid(o) + (k ? sp : 0), 0); let x = (SAFE.left + SAFE.right)/2 - tw/2;
+    for (const o of ln){ ctx.font = exFont(o.em ? 900 : 800, px, o.em); ctx.fillStyle = o.em ? S.ex.accent : exInk(); ctx.fillText(o.w, x, y + i*px*1.18); x += ctx.measureText(o.w).width + sp; } });
+  ctx.restore(); return lines.length*px*1.18;
+}
+const pop = (lt, at, len) => { const q = clamp((lt - at)/(len || 0.32), 0, 1); return q <= 0 ? 0 : q >= 1 ? 1 : 1 + 2.2*Math.pow(q - 1, 3) + 1.2*Math.pow(q - 1, 2); };
+function exPill(ctx, text, cx, cy, s, px){
+  if (s <= 0) return; ctx.save(); ctx.translate(cx, cy); ctx.scale(s, s); ctx.globalAlpha *= clamp(s, 0, 1);
+  ctx.font = exFont(700, px); const tw = ctx.measureText(text).width, h = px*1.7, w = tw + px*2.2;
+  ctx.shadowColor = "rgba(0,0,0,.18)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6; ctx.fillStyle = exPillBg(); rr(ctx, -w/2, -h/2, w, h, h/2); ctx.fill();
+  ctx.shadowColor = "transparent"; ctx.fillStyle = S.ex.accent; ctx.beginPath(); ctx.arc(-w/2 + px*0.85, 0, px*0.26, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = exInk(); ctx.textBaseline = "middle"; ctx.textAlign = "left"; ctx.fillText(text, -w/2 + px*1.45, 2); ctx.restore();
+}
+function exCount(text, q){ const m = String(text).match(/^(\D*?)([\d][\d,]*(?:\.\d+)?)(.*)$/); if (!m) return text;
+  const raw = m[2].replace(/,/g, ""), dec = (raw.split(".")[1] || "").length, v = parseFloat(raw)*q;
+  let s = v.toFixed(dec); if (m[2].includes(",")) s = Number(s).toLocaleString("en-US", {minimumFractionDigits:dec, maximumFractionDigits:dec}); return m[1] + s + m[3]; }
+function exDrawCard(ctx, c, lt, d){
+  const cx = (SAFE.left + SAFE.right)/2;
+  if (c.kind === "keyword"){
+    let y = (SAFE.top + SAFE.bottom)/2 - 240; y += exTitle(ctx, c.title || "Comment", y, 96, pop(lt, 0, 0.3)) + 60;
+    const letters = [...(c.word || "").toUpperCase()].slice(0, 10), n = letters.length || 1, gap = 18, size = Math.min(150, (SAFE.right - SAFE.left - gap*(n-1))/n);
+    let x = cx - (n*size + (n-1)*gap)/2;
+    letters.forEach((L, k) => { const s = pop(lt, 0.35 + k*0.12, 0.3); if (s > 0){ ctx.save(); ctx.translate(x + size/2, y + size/2); ctx.scale(s, s);
+      ctx.fillStyle = exPillBg(); ctx.strokeStyle = S.ex.accent; ctx.lineWidth = 7; rr(ctx, -size/2, -size/2, size, size, 18); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = S.ex.accent; ctx.font = exFont(900, size*0.62); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(L, 0, size*0.04); ctx.restore(); } x += size + gap; });
+    if (c.sub) exTitle(ctx, c.sub, y + size + 70, 56, pop(lt, 0.4 + n*0.12, 0.3));
+    return;
+  }
+  if (c.kind === "follow"){
+    const s = pop(lt, 0.05, 0.35)*(1 + 0.035*Math.sin(Math.max(0, lt - 0.4)*6)), w = 640, h = 190, y = (SAFE.top + SAFE.bottom)/2 - 120;
+    if (s > 0){ ctx.save(); ctx.translate(cx, y); ctx.scale(s, s);
+      ctx.fillStyle = "#2ec5c2"; rr(ctx, -w/2 - 12, -h/2 - 8, w, h, h/2); ctx.fill(); ctx.fillStyle = S.ex.accent; rr(ctx, -w/2 + 12, -h/2 + 8, w, h, h/2); ctx.fill();
+      ctx.fillStyle = "#121318"; rr(ctx, -w/2, -h/2, w, h, h/2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = exFont(900, 104); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText((c.title || "FOLLOW").toUpperCase(), 0, 6); ctx.restore(); }
+    if (c.sub){ ctx.save(); ctx.globalAlpha *= clamp((lt - 0.4)/0.3, 0, 1); ctx.fillStyle = exInk(); ctx.font = exFont(900, 82); ctx.textAlign = "center"; ctx.textBaseline = "top";
+      let px = 82; while (px > 40 && ctx.measureText(c.sub).width > SAFE.right - SAFE.left){ px -= 4; ctx.font = exFont(900, px); } ctx.fillText(c.sub, cx, y + 200); ctx.restore(); }
+    return;
+  }
+  let y = SAFE.top + 40; const rise = (1 - ease(clamp(lt/0.35, 0, 1)))*30;
+  y += exTitle(ctx, c.title || "", y + rise, 76, clamp(lt/0.3, 0, 1)) + 36;
+  const img = c.img ? IMAGES.get(c.img) : null;
+  if (img && img.naturalWidth){
+    const mw = SAFE.right - SAFE.left, mh = c.big ? 420 : 600, sc = Math.min(mw/img.naturalWidth, mh/img.naturalHeight), w = img.naturalWidth*sc, h = img.naturalHeight*sc, s = pop(lt, 0.25, 0.4);
+    if (s > 0){ ctx.save(); ctx.translate(cx, y + h/2); ctx.scale(0.9 + 0.1*s, 0.9 + 0.1*s); ctx.globalAlpha *= clamp(s, 0, 1);
+      ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10; ctx.fillStyle = "#fff"; rr(ctx, -w/2 - 8, -h/2 - 8, w + 16, h + 16, 22); ctx.fill();
+      ctx.shadowColor = "transparent"; rr(ctx, -w/2, -h/2, w, h, 16); ctx.clip(); ctx.drawImage(img, -w/2, -h/2, w, h); ctx.restore(); }
+    y += h + 50;
+  }
+  if (c.big){
+    const q = ease(clamp((lt - 0.3)/0.9, 0, 1)), a = clamp((lt - 0.25)/0.2, 0, 1); let px = 230; ctx.save(); ctx.globalAlpha *= a; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.font = exFont(900, px); while (px > 90 && ctx.measureText(c.big).width > SAFE.right - SAFE.left){ px -= 10; ctx.font = exFont(900, px); }
+    ctx.fillStyle = exInk(); ctx.fillText(exCount(c.big, q), cx, y); ctx.restore(); y += px*1.05;
+    if (c.sub){ ctx.save(); ctx.globalAlpha *= clamp((lt - 1)/0.3, 0, 1); ctx.fillStyle = S.ex.theme === "paper" ? "#5a6172" : "rgba(255,255,255,.75)"; ctx.font = exFont(600, 44); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(c.sub, cx, y); ctx.restore(); y += 70; }
+  } else if (c.sub){ ctx.save(); ctx.globalAlpha *= clamp((lt - 0.3)/0.3, 0, 1); ctx.fillStyle = S.ex.theme === "paper" ? "#5a6172" : "rgba(255,255,255,.75)"; ctx.font = exFont(600, 46); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(c.sub, cx, y); ctx.restore(); y += 80; }
+  const pills = (c.pills || "").split(",").map(x => x.trim()).filter(Boolean).slice(0, 6);
+  if (pills.length){ const px = 44, step = px*2.25, block = pills.length*step, startY = (!img && !c.big) ? Math.max(y + step/2, (SAFE.top + SAFE.bottom)/2 - block/2 + step/2) : y + step/2;
+    pills.forEach((t, k) => exPill(ctx, t, cx + (k % 2 ? 40 : -40)*(pills.length > 1 ? 1 : 0), startY + k*step, pop(lt, 0.5 + k*0.32, 0.3), px)); y = startY + block - step/2; }
+  return y;
+}
+const EXPLAIN = {
+  total: exTotal,
+  render(ctx, T){
+    exBackground(ctx); const {i, lt, d} = exLocate(T), c = exCards()[i]; if (!c) return;
+    const enter = i > 0 ? 1 - ease(clamp(lt/0.28, 0, 1)) : 0;
+    ctx.save(); ctx.translate(enter*W*0.18, 0); ctx.globalAlpha = 1 - enter*0.6;
+    if (c.kind === "card"){ // measure once at full size, then center the whole stack in the safe zone
+      ctx.save(); ctx.globalAlpha = 0; const end = exDrawCard(ctx, c, 99, d); ctx.restore();
+      const top = SAFE.top + 40, off = Math.max(0, ((SAFE.top + SAFE.bottom) - (top + end))/2 - 40); ctx.translate(0, off); }
+    exDrawCard(ctx, c, lt, d); ctx.restore();
+  },
+  sync(playing){ if (EX.vo){ const d = EX.vo.duration || 0; playSync(EX.vo, clamp(Rt.T, 0, d), playing && Rt.T < d - 0.05, 0.3); } },
+  lanes(){ const L = exTimes().map(([a, b], k) => ({row:0, t0:a, t1:b, color: k % 2 ? "--laneB" : "--laneA", label: String(k + 1)}));
+    if (EX.vo) L.push({row:1, t0:0, t1:Math.min(EX.vo.duration || 0, exTotal()), color:"--cap", label:"Voiceover"}); return L; },
+  legend: [["--laneA","Cards"],["--cap","Voiceover"]],
+  hasAudio: () => !!EX.vo,
+  ready: () => true,
+};
+async function exLoadVo(file){
+  if (EX.vo) unregVideo(EX.vo); EX.vo = null; EX.voFile = null;
+  let v; try { v = await openVideo(file); } catch(e){ $("voMeta").textContent = "That file wouldn't open. Try MP3, M4A, WAV, MP4 or MOV."; throw e; }
+  regVideo(v, () => S.ex.voVol); EX.vo = v; EX.voFile = file; $("voMeta").textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s`; exVoNote();
+}
+function exVoNote(){ const n = $("voNote"); if (!EX.vo){ n.className = "note"; return; } const vd = EX.vo.duration || 0, ct = exTotal();
+  if (Math.abs(vd - ct) > 0.4){ n.className = "note warn"; n.textContent = `Your cards run ${ct.toFixed(1)}s and the voiceover runs ${vd.toFixed(1)}s. Stretch the cards to fit, or set each card's length with Ends here.`; }
+  else { n.className = "note ok"; n.textContent = "Cards and voiceover line up."; } }
+function exRenderList(){
+  const ul = $("exList"); ul.innerHTML = ""; const ts = exTimes();
+  exCards().forEach((c, i) => {
+    const li = document.createElement("li"); li.className = "cap ex";
+    const head = document.createElement("div"); head.className = "brHead";
+    const nm = document.createElement("span"); nm.textContent = `${i + 1}. ${c.kind === "keyword" ? "Comment keyword" : c.kind === "follow" ? "Follow" : "Headline card"} · ${ts[i][0].toFixed(1)}–${ts[i][1].toFixed(1)}s`;
+    const acts = document.createElement("span"); acts.className = "acts"; acts.style.marginLeft = "auto";
+    const b = (t, lab, fn) => { const x = document.createElement("button"); x.className = "btn sm"; x.textContent = t; x.setAttribute("aria-label", lab); x.title = lab; x.onclick = fn; acts.append(x); };
+    b("Show", `Jump to card ${i+1}`, () => seek(ts[i][0] + Math.min(1.4, (ts[i][1] - ts[i][0])*0.8)));
+    b("↑", "Move up", () => { if (i){ [exCards()[i-1], exCards()[i]] = [exCards()[i], exCards()[i-1]]; exChanged(); } });
+    b("↓", "Move down", () => { if (i < exCards().length - 1){ [exCards()[i+1], exCards()[i]] = [exCards()[i], exCards()[i+1]]; exChanged(); } });
+    b("✕", "Remove card", () => { exCards().splice(i, 1); exChanged(); });
+    head.append(nm, acts); li.append(head);
+    const field = (label, key, ph, full) => { const l = document.createElement("label"); if (full) l.style.gridColumn = "1/-1"; l.textContent = label; const inp = document.createElement("input"); inp.type = "text"; inp.value = c[key] || ""; inp.placeholder = ph || "";
+      inp.addEventListener("input", () => { c[key] = inp.value; persist(); Rt.dirty = true; }); l.append(inp); li.append(l); };
+    if (c.kind === "card"){ field("Headline", "title", "A full video editor for *Claude*", true); field("Tags (commas between)", "pills", "Free, Open source", true); field("Big number", "big", "87,000"); field("Small line", "sub", "stars on GitHub");
+      const l = document.createElement("label"); l.textContent = "Picture"; const row = document.createElement("span"); row.className = "row";
+      const up = document.createElement("span"); up.className = "btn sm file"; up.textContent = c.img ? "Replace" : "Add";
+      const fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; up.append(fi);
+      fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const key = "card:" + f.name.replace(/[\[\]]/g, ""), img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.size = f.size; img.dataset.broll = "1"; img._file = f;
+        try { await img.decode(); } catch(e){ return; } IMAGES.set(key.toLowerCase(), img); c.img = key.toLowerCase(); persist(); exRenderList(); seek(ts[i][0] + 1); };
+      row.append(up); if (c.img){ const x = document.createElement("button"); x.className = "btn sm"; x.textContent = "Remove"; x.onclick = () => { c.img = null; persist(); exRenderList(); Rt.dirty = true; }; row.append(x); }
+      if (c.img && !IMAGES.get(c.img)){ const w = document.createElement("span"); w.className = "note warn"; w.textContent = "Missing, add it again"; row.append(w); }
+      l.append(row); li.append(l);
+    } else if (c.kind === "keyword"){ field("Top line", "title", "Comment"); field("Keyword", "word", "LABEL"); field("Bottom line", "sub", "and I'll send you the checklist", true); }
+    else { field("Button", "title", "FOLLOW"); field("Your handle", "sub", "@pnphealthdecoder"); }
+    const dl = document.createElement("label"); dl.textContent = "Seconds"; const di = document.createElement("input"); di.type = "number"; di.min = 0.5; di.step = 0.1; di.value = (+c.dur || 3).toFixed(1);
+    di.addEventListener("change", () => { c.dur = clamp(+di.value || 3, 0.5, 60); exChanged(); }); dl.append(di); li.append(dl);
+    const eh = document.createElement("label"); eh.textContent = " "; const eb = document.createElement("button"); eb.className = "btn sm"; eb.textContent = "Ends here"; eb.title = "Make this card end at the playhead";
+    eb.onclick = () => { const t = Rt.T - ts[i][0]; if (t >= 0.5){ c.dur = Math.round(t*10)/10; exChanged(); } }; eh.append(eb); li.append(eh);
+    ul.append(li);
+  });
+}
+function exChanged(){ persist(); exRenderList(); exVoNote(); seek(Math.min(Rt.T, exTotal())); renderCaps(); Rt.dirty = true; }
+const MODS = {prompter:SWIPE, scenes:SWIPE, react:REACT, green:GREEN, explain:EXPLAIN};
 const mod = () => MODS[S.format] || SWIPE;
 const total = () => mod().total();
 
@@ -1260,7 +1623,7 @@ const HIT = []; let drag = null;
 
 /* caption call-out: same stamp look as True/False, pinned to the end, bouncing arrow */
 const CO_LEN = 3;
-const CO_PHRASES = ["Read the caption ↓", "More in the caption ↓", "The answer's in the caption ↓", "True or false? Caption ↓"];
+const CO_PHRASES = ["Read the caption ↓", "More in the caption ↓", "The answer's in the caption ↓", "True or false? Caption ↓", "Tap my name for the link ↓", "Comment PLAY for the link ↓"];
 const coText = t => t.replace(/[\s\u2193\u21E9\u2B07\uFE0F]+$/u, "").trim();
 function capTimes(cp){
   if (cp.style === "callout" && cp.endPin){ const tot = total(); return [Math.max(0, Math.round((tot - CO_LEN)*10)/10), tot]; }
@@ -1876,6 +2239,7 @@ function showStep(){
   if (pid === "broll") renderBroll();
   if (pid === "notify") renderNotifs();
   if (pid === "clips") renderClips();
+  if (pid === "cards") exRenderList();
   if (pid === "words"){ $("words").value = S.words[S.format] || ""; updateSecNote(); updateImgNote(); }
   outs();
 }
@@ -1888,8 +2252,9 @@ function setFormat(fmt){
 function radio(name, val){ const el = document.querySelector(`input[name=${name}][value="${val}"]`); if (el) el.checked = true; }
 function syncUI(){
   for (const n of ["sync","fit","end","pos","sceneIn","em","style","align","layout","timing","corner","keyMode","bgType","behind","gpos"]) radio(n, S[n]);
-  for (const id of ["travel","minMove","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim"]) $(id).value = S[id];
+  for (const id of ["travel","minMove","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim","fxEvery"]) $(id).value = S[id];
   $("font").value = S.font; $("weight").value = S.weight; $("emCol").value = S.emCol; $("credit").value = S.credit;
+  $("fx").value = S.fx || "none"; fxUI(); if (typeof exLookUI === "function") exLookUI();
   $("keyCol").value = S.keyCol; $("bgCol1").value = S.bgCol1; $("bgCol2").value = S.bgCol2;
   $("seriesOn").checked = !!S.seriesOn; $("seriesText").value = S.seriesText || ""; $("seriesCorner").value = S.seriesCorner || "tl";
   for (const k of ["a","b"]){ const c = RC[k], K = k.toUpperCase(), s = $("s"+K), e = $("e"+K);
@@ -1904,7 +2269,7 @@ function outs(){
   const o = (id, t) => { const el = $(id+"Out"); if (el) el.textContent = t; };
   o("travel", S.travel.toFixed(2)+"×"); o("minMove", S.minMove.toFixed(1)); o("size", S.size+" px"); o("leading", S.leading.toFixed(2)); o("imgScale", pct(S.imgScale));
   o("clipVol", pct(S.clipVol)); o("volA", pct(S.volA)); o("volB", pct(S.volB)); o("fgVol", pct(S.fgVol)); o("bgVol", pct(S.bgVol)); o("bgDim", pct(S.bgDim));
-  o("keySim", S.keySim.toFixed(2)); o("keySmooth", S.keySmooth.toFixed(2)); o("keySpill", S.keySpill.toFixed(2)); o("fgScale", pct(S.fgScale)); o("fgX", pct(S.fgX)); o("fgY", pct(S.fgY));
+  o("keySim", S.keySim.toFixed(2)); o("keySmooth", S.keySmooth.toFixed(2)); o("keySpill", S.keySpill.toFixed(2)); o("fgScale", pct(S.fgScale)); o("fgX", pct(S.fgX)); o("fgY", pct(S.fgY)); o("fxEvery", (+S.fxEvery).toFixed(2).replace(/0$/,"") + "s");
   $("motionOpts").hidden = S.sync !== "motion";
   const f = FONTS[S.font] || FONTS.figtree; $("fontNote").hidden = !(f.single && S.em === "bold"); $("weight").disabled = !!f.single;
   $("layoutNote").textContent = LAYOUT_NOTES[S.layout]; $("timingWrap").hidden = S.layout === "stitch"; $("cornerWrap").hidden = S.layout !== "pip";
@@ -1946,7 +2311,9 @@ for (const name in radios) $$(`input[name=${name}]`).forEach(r => r.addEventList
   if (name === "sync") renderClips();
   if (name === "bgType") mod().sync(Rt.playing);
   changed(); }));
-for (const id of ["travel","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim"])
+function fxUI(){ $("fxNote").textContent = FX_NOTES[S.fx] || ""; $("fxEveryWrap").hidden = !(S.fx === "sliced" || S.fx === "bigsmall"); }
+$("fx").addEventListener("change", e => { S.fx = e.target.value; fxUI(); changed(); });
+for (const id of ["travel","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim","fxEvery"])
   $(id).addEventListener("input", e => { S[id] = +e.target.value; changed(); });
 $("minMove").addEventListener("input", e => { S.minMove = +e.target.value; SW.scenes.forEach(s => s.raw && buildMotion(s)); renderClips(); changed(); });
 $("font").addEventListener("change", e => { S.font = e.target.value; loadFont(); changed(); });
@@ -2016,7 +2383,7 @@ const DB = (() => {
   return {put:(st, rec) => run(st, "readwrite", o => o.put(rec)), get:(st, id) => run(st, "readonly", o => o.get(id)),
           all:st => run(st, "readonly", o => o.getAll()), del:(st, id) => run(st, "readwrite", o => o.delete(id))};
 })();
-const FMT_NAMES = {prompter:"Teleprompter", scenes:"Scene swipes", react:"React & respond", green:"Green screen"};
+const FMT_NAMES = {prompter:"Teleprompter", scenes:"Scene swipes", react:"React & respond", green:"Green screen", explain:"Explainer cards"};
 const mb = n => n >= 1048576 ? (n/1048576).toFixed(n >= 104857600 ? 0 : 1) + " MB" : Math.max(1, Math.round(n/1024)) + " KB";
 const clock = d => new Date(d).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 function saveLabel(msg, warn){
@@ -2027,13 +2394,14 @@ function saveLabel(msg, warn){
 function gatherMedia(){
   const media = {
     sw: SW.demo ? [] : SW.scenes.filter(sc => sc.file && sc.status !== "error").map(sc => ({file:sc.file, name:sc.name, raw:sc.raw || null, start:sc.start || 0, end:sc.end != null ? sc.end : null, sec:sc.sec != null ? sc.sec : null})),
+    ex: {vo: EX.voFile || null},
     rc: {}, gr: {fg: GR.fg ? {file:GR.fg.file, start:GR.fg.start, end:GR.fg.end} : null, bgImg: GR.bgImgFile || null, bgVid: GR.bgVidFile || null},
     images: [...IMAGES.values()].filter(img => img._file).map(img => ({key:img.dataset.name, size:img.dataset.size || "", broll:!!img.dataset.broll, file:img._file}))
   };
   for (const k of ["a","b"]) media.rc[k] = RC[k] && RC[k].file ? {file:RC[k].file, start:RC[k].start, end:RC[k].end} : null;
   let size = 0; const add = f => { if (f && f.size) size += f.size; };
   media.sw.forEach(m => add(m.file)); add(media.rc.a && media.rc.a.file); add(media.rc.b && media.rc.b.file);
-  add(media.gr.fg && media.gr.fg.file); add(media.gr.bgImg); add(media.gr.bgVid); media.images.forEach(m => add(m.file));
+  add(media.gr.fg && media.gr.fg.file); add(media.gr.bgImg); add(media.gr.bgVid); add(media.ex.vo); media.images.forEach(m => add(m.file));
   return {media, size};
 }
 async function saveProject(){
@@ -2063,6 +2431,7 @@ function clearMedia(){
   if (GR.fg) unregVideo(GR.fg.video); GR.fg = null; $("fgMeta").textContent = "Sample person loaded";
   if (GR.bgVid) unregVideo(GR.bgVid); GR.bgVid = null; GR.bgVidFile = null; $("bgVidMeta").textContent = "No video yet";
   GR.bgImg = null; GR.bgImgFile = null; $("bgImgMeta").textContent = "No photo yet";
+  if (EX.vo) unregVideo(EX.vo); EX.vo = null; EX.voFile = null; $("voMeta").textContent = "No voiceover yet";
   for (const img of IMAGES.values()) try { URL.revokeObjectURL(img.src); } catch(e){}
   IMAGES.clear(); imgVer++; nfCache.clear();
 }
@@ -2087,6 +2456,7 @@ async function restoreMedia(m){
       else { sc.status = "queued"; queue = queue.then(() => analyze(sc)); }
     }
   }
+  if (m.ex && m.ex.vo){ try { await exLoadVo(asFile(m.ex.vo, m.ex.vo.name)); } catch(e){ missing++; } }
   for (const k of ["a","b"]){ const it = m.rc && m.rc[k]; if (!it) continue;
     await loadReact(k, asFile(it.file, it.file.name)); if (RC[k]){ RC[k].start = it.start; RC[k].end = it.end; } mountReactTrim(k); }
   if (m.gr){
@@ -2154,6 +2524,229 @@ $("saveBtn").addEventListener("click", saveProject);
 $("newProj").addEventListener("click", newProject);
 $("projName").addEventListener("input", e => { S.projName = e.target.value; persist(); });
 document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s"){ e.preventDefault(); saveProject(); } });
+
+/* explainer controls */
+$("exAdd").addEventListener("click", () => { const k = $("exKind").value;
+  exCards().push(k === "keyword" ? {kind:"keyword", title:"Comment", word:"", sub:"", dur:3.5} : k === "follow" ? {kind:"follow", title:"FOLLOW", sub:"@pnphealthdecoder", dur:2.5} : {kind:"card", title:"", dur:3});
+  exChanged(); seek(exTimes()[exCards().length - 1][0] + 1); });
+$$("input[name=exTheme]").forEach(r => r.addEventListener("change", e => { S.ex.theme = e.target.value; exLookUI(); changed(); }));
+$("exAccent").addEventListener("input", e => { S.ex.accent = e.target.value; changed(); });
+$("exBg").addEventListener("input", e => { S.ex.bg = e.target.value; changed(); });
+$("exFont").addEventListener("change", e => { S.ex.font = e.target.value; changed(); });
+$("exSwoosh").addEventListener("change", e => { S.ex.swoosh = e.target.checked; changed(); });
+$("voVol").addEventListener("input", e => { S.ex.voVol = +e.target.value; $("voVolOut").textContent = Math.round(S.ex.voVol*100) + "%"; changed(); });
+$("voIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; try { await exLoadVo(f); } catch(err){ return; } stop(); Rt.T = 0; exRenderList(); renderCaps(); changed(); });
+$("voClear").addEventListener("click", () => { if (EX.vo) unregVideo(EX.vo); EX.vo = null; EX.voFile = null; $("voMeta").textContent = "No voiceover yet"; exVoNote(); changed(); });
+$("voFit").addEventListener("click", () => { if (!EX.vo) return; const vd = EX.vo.duration || 0, ct = exTotal(); if (!(vd > 0.5)) return; const k = vd/ct;
+  exCards().forEach(c => c.dur = Math.max(0.5, Math.round((+c.dur || 3)*k*10)/10)); const diff = Math.round((vd - exTotal())*10)/10, last = exCards()[exCards().length - 1]; if (last) last.dur = Math.max(0.5, Math.round((last.dur + diff)*10)/10); exChanged(); });
+function exLookUI(){ radio("exTheme", S.ex.theme); $("exAccent").value = S.ex.accent; $("exBg").value = S.ex.bg; $("exFont").value = S.ex.font; $("exSwoosh").checked = !!S.ex.swoosh;
+  $("exBg").hidden = $("exBgLbl").hidden = S.ex.theme !== "bold"; $("voVol").value = S.ex.voVol; $("voVolOut").textContent = Math.round(S.ex.voVol*100) + "%"; }
+exLookUI();
+
+/* =============== post planner =============== */
+const PSTORE = "stitch-planner-v1";
+const P = {tab:"when", plat:"ig", per:3, topic:"myth", hkFam:"contrast", metric:"views", actH:[0,0,0,0,0,0,0,0], actD:[0,0,0,0,0,0,0], log:[]};
+try { const sv = JSON.parse(localStorage.getItem(PSTORE) || "null"); if (sv) for (const k of Object.keys(P)) if (k in sv) P[k] = sv[k]; } catch(e){}
+function pSave(){ try { localStorage.setItem(PSTORE, JSON.stringify(P)); } catch(e){} }
+const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];           // index 0 = Monday
+const jsDay = d => (d.getDay() + 6) % 7;
+const PLAT = {ig:"Instagram", fb:"Facebook", tt:"TikTok", yt:"YouTube Shorts"};
+const hr12 = h => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+/* [day, from, to) in local time. Sprout Social 2026 (general) and Emulent 2026 (health & wellness). */
+const BENCH = {
+  ig:{peak:[[0,14,16],[1,13,19],[2,12,21],[2,23,24],[3,12,14]], second:[], health:[[1,13,19],[2,13,19]], weekendWeak:true},
+  fb:{peak:[[0,12,13],[1,12,20],[2,12,20]], second:[[0,13,17],[3,12,17]], health:[[0,10,12],[1,10,12],[2,10,12]], weekendWeak:true},
+  tt:{peak:[[0,15,17],[1,14,18],[2,13,20],[3,13,17],[4,15,17]], second:[], health:[[2,11,19]], weekendWeak:true},
+  yt:{peak:[], second:[[1,11,18],[2,11,18]], health:[], weekendWeak:false},
+};
+const inWin = (list, d, h) => list.some(([dd, a, b]) => dd === d && h >= a && h < b);
+const nearWin = (list, d, h) => list.some(([dd, a, b]) => dd === d && h >= a - 1 && h < b + 1);
+function benchScore(pl, d, h){
+  const B = BENCH[pl]; if (inWin(B.peak, d, h)) return 1; if (inWin(B.health, d, h)) return 0.9; if (inWin(B.second, d, h)) return 0.7;
+  if (nearWin(B.peak, d, h) || nearWin(B.health, d, h)) return 0.55;
+  const day = h >= 7 && h < 22; if (d >= 5) return B.weekendWeak ? (day ? 0.22 : 0.1) : (day ? 0.4 : 0.12);
+  return day ? 0.35 : 0.12;
+}
+const hasAct = () => P.actH.some(x => +x > 0) && P.actD.some(x => +x > 0);
+function actScore(d, h){ const mh = Math.max(...P.actH.map(Number)) || 1, md = Math.max(...P.actD.map(Number)) || 1; return (+P.actH[Math.floor(h/3)]/mh) * (+P.actD[d]/md); }
+/* your results: each post vs your typical post on that platform, shrunk toward "no effect" until there are a few posts */
+const BLOCKS = [[5,9,"early morning"],[9,12,"late morning"],[12,14,"lunch"],[14,17,"afternoon"],[17,21,"evening"],[21,29,"late night"]];
+const blockOf = h => { const x = h < 5 ? h + 24 : h; return BLOCKS.findIndex(([a, b]) => x >= a && x < b); };
+function metricOf(e){ const n = k => +e[k] || 0;
+  if (P.metric === "follows") return e.follows === "" || e.follows == null ? null : n("follows");
+  if (P.metric === "eng") return (e.likes ?? "") === "" && (e.comments ?? "") === "" ? null : n("likes") + 2*n("comments") + 3*n("shares") + 3*n("saves");
+  return e.views === "" || e.views == null ? null : n("views"); }
+const median = a => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m-1] + b[m])/2; };
+function scored(pl){ // [{e, lr}] log-ratio vs that platform's median
+  const out = [], byPl = {};
+  for (const e of P.log){ const v = metricOf(e); if (v == null) continue; (byPl[e.plat] = byPl[e.plat] || []).push([e, v]); }
+  for (const k in byPl){ if (pl && k !== pl) continue; const m = median(byPl[k].map(x => x[1])); for (const [e, v] of byPl[k]) out.push({e, lr: Math.log((v + 1)/(m + 1))}); }
+  return out;
+}
+function effect(rows, keyFn, k){ const g = {}; for (const r of rows){ const key = keyFn(r.e); if (key == null || key === "") continue; (g[key] = g[key] || []).push(r.lr); }
+  const out = {}; for (const key in g){ const a = g[key]; out[key] = {n:a.length, eff: clamp(a.reduce((s, x) => s + x, 0)/(a.length + (k || 3)), -0.9, 0.9)}; } return out; }
+function learned(pl){ const rows = scored(pl);
+  const at = e => new Date(e.at);
+  return {n: rows.length, blk: effect(rows, e => blockOf(at(e).getHours())), dow: effect(rows, e => jsDay(at(e)))}; }
+function scoreGrid(pl){
+  const L = learned(pl), act = hasAct(), g = [];
+  for (let d = 0; d < 7; d++){ g[d] = []; for (let h = 0; h < 24; h++){
+    let s = benchScore(pl, d, h); if (act) s = 0.35*s + 0.65*actScore(d, h);
+    const b = L.blk[blockOf(h)], w = L.dow[d]; s *= Math.exp((b ? b.eff : 0) + (w ? w.eff : 0)); g[d][h] = s; } }
+  const mx = Math.max(...g.flat()) || 1; return {g: g.map(r => r.map(x => x/mx)), L, act};
+}
+function upcoming(pl, G){ const out = [], now = new Date(); now.setMinutes(0, 0, 0);
+  for (let i = 1; i <= 7*24; i++){ const t = new Date(now.getTime() + i*3600e3); out.push({t, s: G.g[jsDay(t)][t.getHours()]}); } return out; }
+const when = t => `${t.toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"})}, ${hr12(t.getHours())}`;
+function renderWhen(){
+  const pl = P.plat, G = scoreGrid(pl), now = new Date(), nd = jsDay(now), nh = now.getHours(), cur = G.g[nd][nh];
+  const up = upcoming(pl, G), best = up.reduce((a, b) => b.s > a.s ? b : a, up[0]);
+  const next = up.find(x => x.s >= 0.85) || best, go = cur >= 0.85;
+  const box = $("nowBox"); box.className = "nowBox " + (go ? "go" : "wait");
+  box.innerHTML = ""; const b = document.createElement("b"); b.textContent = go ? `Good time to post on ${PLAT[pl]}` : `Don't post yet on ${PLAT[pl]}`;
+  const p = document.createElement("span"); p.className = "note"; p.textContent = go ? `This hour scores ${Math.round(cur*100)}. Post in the next hour if it's ready.` : `This hour scores ${Math.round(cur*100)}. Next strong window: ${when(next.t)} (${Math.round(next.s*100)}).`;
+  box.append(b, p);
+  const n = G.L.n; $("pConf").textContent = (n < 5 ? `Running on benchmarks${G.act ? " and your Most active times" : ""}. Log ${5 - n} more ${PLAT[pl]} post${5 - n === 1 ? "" : "s"} with numbers and it starts adjusting to your results.` : n < 15 ? `Starting to learn from your ${n} logged ${PLAT[pl]} posts.` : `Mostly driven by your ${n} logged ${PLAT[pl]} posts.`);
+  const heat = $("heat"); heat.innerHTML = "";
+  heat.append(Object.assign(document.createElement("span"), {className:"d"}));
+  for (let h = 0; h < 24; h++) heat.append(Object.assign(document.createElement("span"), {className:"h", textContent: h % 3 ? "" : hr12(h)}));
+  for (let d = 0; d < 7; d++){ heat.append(Object.assign(document.createElement("span"), {className:"d", textContent: DAYS[d]}));
+    for (let h = 0; h < 24; h++){ const c = document.createElement("span"), v = G.g[d][h]; c.className = "c" + (d === nd && h === nh ? " now" : "");
+      c.style.background = `color-mix(in srgb, var(--accent) ${Math.round(8 + v*92)}%, var(--field))`; c.title = `${DAYS[d]} ${hr12(h)}: ${Math.round(v*100)}`; heat.append(c); } }
+  // weekly plan: best hour per day, then the strongest days, no two on the same day
+  const byDay = {}; for (const x of up){ const k = x.t.toDateString(); if (!byDay[k] || x.s > byDay[k].s) byDay[k] = x; }
+  const picks = Object.values(byDay).sort((a, b) => b.s - a.s).slice(0, clamp(+P.per || 3, 1, 7)).sort((a, b) => a.t - b.t);
+  const ol = $("pPlan"); ol.innerHTML = "";
+  for (const x of picks){ const li = document.createElement("li"); li.textContent = when(x.t); const sc = document.createElement("span"); sc.className = "score"; sc.textContent = Math.round(x.s*100); li.append(sc); ol.append(li); }
+  chip(pl, go, next);
+}
+function chip(pl, go, next){ const c = $("nowChip"); c.textContent = go ? `● Good time to post (${PLAT[pl]})` : `◌ Next best: ${when(next.t)}`; c.style.color = go ? "var(--ok)" : "var(--muted)"; }
+function chipOnly(){ const G = scoreGrid(P.plat), now = new Date(), cur = G.g[jsDay(now)][now.getHours()], up = upcoming(P.plat, G);
+  chip(P.plat, cur >= 0.85, up.find(x => x.s >= 0.85) || up.reduce((a, b) => b.s > a.s ? b : a, up[0])); }
+function renderAct(){
+  const mk = (box, arr, labels) => { box.innerHTML = ""; labels.forEach((l, i) => { const lab = document.createElement("label"); lab.textContent = l;
+    const inp = document.createElement("input"); inp.type = "number"; inp.min = 0; inp.max = 10; inp.value = arr[i] || ""; inp.setAttribute("aria-label", `Activity ${l}`);
+    inp.addEventListener("input", () => { arr[i] = clamp(+inp.value || 0, 0, 10); pSave(); renderWhen(); }); lab.append(inp); box.append(lab); }); };
+  mk($("actH"), P.actH, ["12a","3a","6a","9a","12p","3p","6p","9p"]); mk($("actD"), P.actD, DAYS); }
+/* formats and hooks */
+const FMTS = {
+  prompter:["Teleprompter swipe","Words ride up with your hand. Holds attention on a list or a step-by-step."],
+  scenes:["Scene swipes","A new clip and new words every swipe. Good when there are 3–5 separate points."],
+  react:["React & respond (split or stitch)","The claim on screen, then you. The claim itself is the hook."],
+  green:["Green screen + words","You in front of the thing you're explaining: a label, a lab report, a diagram."],
+  gmirror:["Green screen: mirror twin","Two of you arguing it out. Fits a myth vs. fact back-and-forth."],
+  gsil:["Green screen: inside the head","Your outline filled with footage. Fits \"what's happening inside your body.\""],
+  gbig:["Green screen: big and small","Size jumps on each beat. Fits \"tiny habit, big difference.\""],
+  talk:["Talking head (Captions)","Just you and captions. Your most personal format."],
+  explain:["Explainer cards (no camera)","Voiceover over animated cards. Fits lists, tools and \"3 things\" posts, and ends on a comment keyword."],
+  faceless:["Faceless graphic (Canva)","Your attraction layer for likes, comments and giveaways."],
+};
+const FIT = { // 1–5, my starting judgment; your logged results move it
+  myth:    {explain:4, react:5, gmirror:5, green:4, scenes:4, prompter:3, talk:3, faceless:3, gsil:2, gbig:2},
+  explain: {green:5, gsil:5, prompter:4, scenes:4, talk:3, faceless:3, gbig:2, react:2, gmirror:2},
+  tip:     {explain:5, scenes:5, prompter:5, gbig:4, talk:4, green:3, faceless:3, react:2, gmirror:2, gsil:2},
+  story:   {explain:1, talk:5, prompter:4, scenes:3, green:3, gsil:2, faceless:2, react:1, gmirror:2, gbig:1},
+  react:   {react:5, gmirror:4, green:4, talk:3, scenes:3, prompter:2, faceless:2, gsil:2, gbig:2},
+  promo:   {explain:5, faceless:5, scenes:4, react:4, talk:4, green:3, prompter:3, gbig:3, gmirror:2, gsil:2},
+};
+const TOPICS = {myth:"Myth or fact", explain:"Explain it like I'm 10", tip:"How-to tip", story:"Clinic story", react:"Responding to a claim", promo:"Book / giveaway / HealthQuest"};
+const HOOK_FOR = {myth:"contrast", explain:"curiosity", tip:"experience", story:"experience", react:"contrast", promo:"curiosity"};
+const HOOK_WHY = {
+  experience:"Starts from something you've lived or seen in clinic. Builds trust fast.",
+  contrast:"Sets up what most people do, then flips it. Made for myth-busting.",
+  curiosity:"Opens a gap the viewer wants closed. Made for explaining how the body works.",
+  proof:"Leads with a study, guideline or result. Only use it with a source you can name.",
+};
+const HOOKS = {
+  experience:["After [X] years in pediatrics, this is the question parents ask me most: [question].","The first time a parent asked me about [topic], I gave the textbook answer. Here's what I say now.","I wish someone had told parents this about [topic] before [moment].","I used to tell families [old advice]. I don't anymore. Here's why."],
+  contrast:["Most parents try [common fix] for [problem]. Here's what I'd do instead.","[Food or habit] looks healthy. It might be the reason for [problem].","Myth: [claim]. Here's what's actually going on.","The obvious fix for [problem] isn't the one that works."],
+  curiosity:["There's a reason [surprising thing] happens, and it's not what you think.","Look at one number on [label or lab report]. Here's what it tells you.","Most parents never notice what happens between [step A] and [step B].","What actually happens inside your kid's body when [action]?"],
+  proof:["[Organization] recommends [guideline]. Most families I see are doing [different thing].","A [year] study in [journal] asked [question]. The answer surprised me.","[Number] out of [number] kids [finding], according to [source]."],
+};
+function fmtEffects(){ return effect(scored(), e => e.fmt, 2); }
+function renderFmt(){
+  const t = P.topic, fit = FIT[t], eff = fmtEffects(), n = scored().length, hk = effect(scored(), e => e.hook, 2);
+  const rows = Object.keys(FMTS).map(k => { const e = eff[k]; return {k, s: fit[k]*Math.exp(e ? e.eff : 0), e}; }).sort((a, b) => b.s - a.s).slice(0, 5);
+  const ol = $("fmtRank"); ol.innerHTML = "";
+  for (const r of rows){ const li = document.createElement("li"), b = document.createElement("b"); b.textContent = FMTS[r.k][0];
+    const sc = document.createElement("span"); sc.className = "score"; sc.textContent = Math.min(100, Math.round(r.s/5*100));
+    const w = document.createElement("span"); w.className = "why"; w.textContent = FMTS[r.k][1] + (r.e ? ` Your ${r.e.n} logged post${r.e.n > 1 ? "s" : ""} in this format ran ${r.e.eff >= 0 ? "above" : "below"} your typical post.` : "");
+    li.append(b, sc, w); ol.append(li); }
+  const hkBest = Object.entries(hk).filter(([, v]) => v.n >= 3).sort((a, b) => b[1].eff - a[1].eff)[0];
+  $("fmtConf").textContent = (n < 5 ? "Starting fit is my judgment of each format for this kind of post. It shifts toward what your logged posts show." : `Adjusted by your ${n} logged posts.`) + (hkBest && hkBest[1].eff > 0.05 ? ` Your ${hkBest[0]} hooks have been beating your typical post.` : "");
+}
+function renderHook(keepText){
+  $("hkFam").value = P.hkFam; const sel = $("hkTpl"); sel.innerHTML = "";
+  HOOKS[P.hkFam].forEach((h, i) => { const o = document.createElement("option"); o.value = i; o.textContent = h.length > 70 ? h.slice(0, 68) + "…" : h; sel.append(o); });
+  $("hkWhy").textContent = HOOK_WHY[P.hkFam] + (HOOK_FOR[P.topic] === P.hkFam ? ` This is the usual match for a ${TOPICS[P.topic].toLowerCase()} post.` : "");
+  $("hkWarn").hidden = P.hkFam !== "proof"; if (!keepText) $("hkText").value = HOOKS[P.hkFam][0];
+}
+/* log */
+function fillSel(sel, obj){ sel.innerHTML = ""; for (const k in obj){ const o = document.createElement("option"); o.value = k; o.textContent = Array.isArray(obj[k]) ? obj[k][0] : obj[k]; sel.append(o); } }
+const LOGF = ["at","plat","fmt","hook","topic","views","likes","comments","shares","saves","follows","note"];
+function renderLog(){
+  const tb = $("lgTbl"); tb.innerHTML = "";
+  if (!P.log.length){ tb.innerHTML = '<tr><td class="empty">No posts logged yet.</td></tr>'; return; }
+  const head = document.createElement("tr"); for (const h of ["Posted","Platform","Format","Hook","Views","Likes","Cmts","Shares","Saves","Follows","vs usual",""]) head.append(Object.assign(document.createElement("th"), {textContent:h})); tb.append(head);
+  const lr = new Map(scored().map(r => [r.e, r.lr]));
+  for (const e of [...P.log].sort((a, b) => b.at.localeCompare(a.at))){
+    const tr = document.createElement("tr"), td = (x, n) => tr.append(Object.assign(document.createElement("td"), {textContent: x ?? "", className: n ? "n" : ""}));
+    td(when(new Date(e.at))); td(PLAT[e.plat]); td((FMTS[e.fmt] || [e.fmt])[0]); td(e.hook);
+    for (const k of ["views","likes","comments","shares","saves","follows"]) td(e[k], true);
+    const r = lr.get(e); td(r == null ? "" : `${Math.round(Math.exp(r)*100)}%`, true);
+    const x = document.createElement("button"); x.className = "btn sm"; x.textContent = "✕"; x.setAttribute("aria-label", "Remove this post");
+    x.onclick = () => { P.log = P.log.filter(y => y !== e); pSave(); pRender(); }; const c = document.createElement("td"); c.append(x); tr.append(c); tb.append(tr);
+  }
+}
+function pRender(){ $$("[data-ptab]").forEach(b => b.classList.toggle("on", b.dataset.ptab === P.tab)); $$("[data-ptab-panel]").forEach(s => s.hidden = s.dataset.ptabPanel !== P.tab);
+  $("pPlat").value = P.plat; $("pPer").value = P.per; $("pTopic").value = P.topic; $("lgMetric").value = P.metric;
+  renderWhen(); renderFmt(); renderLog(); }
+function openPlanner(on){ $("planner").hidden = !on; $("studio").hidden = on; $("plannerBtn").textContent = on ? "Back to the studio" : "Post planner"; if (on){ stop(); pRender(); } window.scrollTo({top:0}); }
+$("plannerBtn").addEventListener("click", () => openPlanner($("planner").hidden));
+$("nowChip").addEventListener("click", () => { P.tab = "when"; openPlanner(true); });
+$$("[data-ptab]").forEach(b => b.addEventListener("click", () => { P.tab = b.dataset.ptab; pSave(); pRender(); }));
+$("pPlat").addEventListener("change", e => { P.plat = e.target.value; pSave(); renderWhen(); });
+$("pPer").addEventListener("input", e => { P.per = clamp(+e.target.value || 3, 1, 7); pSave(); renderWhen(); });
+$("pTopic").addEventListener("change", e => { P.topic = e.target.value; P.hkFam = HOOK_FOR[P.topic]; pSave(); renderFmt(); renderHook(); });
+$("hkFam").addEventListener("change", e => { P.hkFam = e.target.value; pSave(); renderHook(); });
+$("hkTpl").addEventListener("change", e => { $("hkText").value = HOOKS[P.hkFam][+e.target.value]; });
+$("hkCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("hkText").value); $("hkMsg").textContent = "Copied."; } catch(e){ $("hkText").select(); $("hkMsg").textContent = "Press Cmd+C to copy."; } });
+$("hkUse").addEventListener("click", () => {
+  const fmt = ["prompter","scenes","green"].includes(S.format) ? S.format : "prompter", hook = $("hkText").value.trim(); if (!hook) return;
+  const cur = S.words[fmt] || "", isSample = cur === SAMPLES[fmt];
+  S.words[fmt] = isSample ? hook : hook + "\n\n" + cur; persist();
+  if (S.format === fmt) { $("words").value = S.words[fmt]; updateSecNote(); }
+  $("hkMsg").textContent = `Added to the top of your ${FORMATS[fmt].name} words.`; Rt.dirty = true;
+});
+$("actClear").addEventListener("click", () => { P.actH.fill(0); P.actD.fill(0); pSave(); renderAct(); renderWhen(); });
+$("lgMetric").addEventListener("change", e => { P.metric = e.target.value; pSave(); pRender(); });
+$("lgAdd").addEventListener("click", () => {
+  const at = $("lgAt").value; if (!at){ $("lgMsg").textContent = "Add when it was posted."; return; }
+  const num = id => $(id).value === "" ? "" : Math.max(0, +$(id).value);
+  P.log.push({at, plat:$("lgPlat").value, fmt:$("lgFmt").value, hook:$("lgHook").value, topic:$("lgTopic").value,
+    views:num("lgViews"), likes:num("lgLikes"), comments:num("lgComments"), shares:num("lgShares"), saves:num("lgSaves"), follows:num("lgFollows"), note:$("lgNote").value.trim()});
+  pSave(); for (const id of ["lgViews","lgLikes","lgComments","lgShares","lgSaves","lgFollows","lgNote"]) $(id).value = "";
+  $("lgMsg").textContent = "Added."; pRender();
+});
+const csvCell = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+$("lgCsv").addEventListener("click", () => {
+  const txt = [LOGF.join(","), ...P.log.map(e => LOGF.map(k => csvCell(e[k])).join(","))].join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], {type:"text/csv"})); a.download = "post-log.csv"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+function parseCsv(t){ const rows = [[]]; let f = "", q = false;
+  for (let i = 0; i < t.length; i++){ const c = t[i];
+    if (q){ if (c === '"' && t[i+1] === '"'){ f += '"'; i++; } else if (c === '"') q = false; else f += c; }
+    else if (c === '"') q = true; else if (c === ","){ rows[rows.length-1].push(f); f = ""; } else if (c === "\n"){ rows[rows.length-1].push(f); f = ""; rows.push([]); } else if (c !== "\r") f += c; }
+  rows[rows.length-1].push(f); return rows.filter(r => r.some(x => x !== "")); }
+$("lgCsvIn").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return; const rows = parseCsv(await f.text()), hd = rows.shift() || [];
+  if (!hd.includes("at") || !hd.includes("plat")){ $("lgMsg").textContent = "That CSV doesn't have the at and plat columns from Download CSV."; return; }
+  const seen = new Set(P.log.map(x => x.at + x.plat)); let n = 0;
+  for (const r of rows){ const o = {}; hd.forEach((h, i) => { if (LOGF.includes(h)) o[h] = ["views","likes","comments","shares","saves","follows"].includes(h) ? (r[i] === "" || r[i] == null ? "" : +r[i]) : (r[i] || ""); });
+    if (o.at && o.plat && !seen.has(o.at + o.plat)){ P.log.push(o); seen.add(o.at + o.plat); n++; } }
+  pSave(); $("lgMsg").textContent = `Loaded ${n} post${n === 1 ? "" : "s"}.`; e.target.value = ""; pRender(); });
+fillSel($("lgFmt"), FMTS); fillSel($("lgTopic"), TOPICS);
+{ const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $("lgAt").value = d.toISOString().slice(0, 16); }
+renderAct(); renderHook(); chipOnly(); setInterval(chipOnly, 5*60e3);
 
 /* boot */
 swLoadDemo(); syncUI(); renderPresets(); renderImages(); setBusy(); loadFont();
