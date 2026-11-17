@@ -2775,7 +2775,7 @@ if (!P.ans) P.ans = {};
 function curQ(){ const v = $("stQ").value; if (v === "own") return {id:"own", q: $("stQOwn").value.trim(), type: null}; const [g, i] = v.split(".").map(Number); return {id: v, q: QBANK[g][2][i], type: QBANK[g][0]}; }
 function loadAnswer(){ const v = $("stQ").value; $("stQOwn").hidden = v !== "own"; $("stBeats").value = P.ans[v] || ""; renderCloserNote(); }
 const CLOSERS = [
-  {g:"standard", t:"I'm April, a pediatric nurse practitioner and mom, building HealthQuest one story at a time. Link's in my bio. As always, be kind to others, and love yourself. Until next time!"},
+  {g:"standard", t:"I'm April, a pediatric nurse practitioner, mom, and the creator of HealthQuest. Link's in my bio. As always, be kind to others, and love yourself. Until next time!"},
   {g:"standard", t:"I'm April, just a girl trying to save healthcare up to $19 billion. Follow along, and find HealthQuest in my bio. Be kind to others, and love yourself. Until next time!"},
   {g:"standard", t:"I'm April. Nurse, mom, and the girl behind HealthQuest. If this hit home, follow along. Be kind to others, and love yourself."},
   {g:"standard", t:"I'm April, a pediatric nurse practitioner turning my story into something kids can use. HealthQuest is in my bio. Be kind to others, and love yourself. Until next time!"},
