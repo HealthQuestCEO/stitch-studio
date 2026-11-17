@@ -2617,7 +2617,9 @@ function renderWhen(){
   const byDay = {}; for (const x of up){ const k = x.t.toDateString(); if (!byDay[k] || x.s > byDay[k].s) byDay[k] = x; }
   const picks = Object.values(byDay).sort((a, b) => b.s - a.s).slice(0, clamp(+P.per || 3, 1, 7)).sort((a, b) => a.t - b.t);
   const ol = $("pPlan"); ol.innerHTML = "";
-  for (const x of picks){ const li = document.createElement("li"); li.textContent = when(x.t); const sc = document.createElement("span"); sc.className = "score"; sc.textContent = Math.round(x.s*100); li.append(sc); ol.append(li); }
+  for (const x of picks){ const li = document.createElement("li"), row = G.g[jsDay(x.t)], h0 = x.t.getHours(); let a = h0, b = h0;
+    while (a > 0 && row[a-1] >= x.s*0.97) a--; while (b < 23 && row[b+1] >= x.s*0.97) b++;
+    li.textContent = b > a ? `${x.t.toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"})}, ${hr12(a)}–${hr12(b + 1)} (all about equal)` : when(x.t); const sc = document.createElement("span"); sc.className = "score"; sc.textContent = Math.round(x.s*100); li.append(sc); ol.append(li); }
   chip(pl, go, next);
 }
 function chip(pl, go, next){ const c = $("nowChip"); c.textContent = go ? `● Good time to post (${PLAT[pl]})` : `◌ Next best: ${when(next.t)}`; c.style.color = go ? "var(--ok)" : "var(--muted)"; }
