@@ -16,7 +16,7 @@ Green screen also has effects: **Mirror twin** (two of you facing each other), *
 
 ## Post planner
 
-Open it with **Prep & post planner** at the top. The **Prep** tab is where you pick the story, hook and format and get Claude's help with ideas and captions.
+Open it with **Prep & post planner** at the top. The **Prep** tab opens first: pick the question you're answering (from your answer sheet, or your own), type your answer in your own words (saved in the browser per question), and click **Plan this post with Claude**. Hook, story type, hook type and closer are optional under "More options"; the story type comes from the question.
 
 - **When to post**: a day-by-hour score for Instagram, Facebook, TikTok or YouTube Shorts, a "Good time to post / Don't post yet" check for right now, and your next posts for the week. Scores start from Sprout Social's 2026 study plus health-and-wellness windows, then lean on your Instagram "Most active times" if you enter them, then on your own logged results.
 - **Format & hook**: pick which story the post is (The Switch, The Evolution, The Stereotype, Roots, The Nurse, My health / my kids' health, The Builder, the books, I built this feature because…, The No's, The Red Tape, The Mission, Check-in, or the Sunday ad). It ranks Stitch formats, suggests a hook type (I'm just a girl who…, Interview question, Hot take, Contrast, Then & now, Open loop, Experience, Curiosity, Proof) and shows the hook's shape. You write the hook in your own words; nothing is pre-filled. Story shape: hook → what happened → one health lesson → "that's why HealthQuest…" → closer.
