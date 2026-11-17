@@ -16,10 +16,11 @@ Green screen also has effects: **Mirror twin** (two of you facing each other), *
 
 ## Post planner
 
-Open it with **Post planner** at the top.
+Open it with **Prep & post planner** at the top. The **Prep** tab is where you pick the story, hook and format and get Claude's help with ideas and captions.
 
 - **When to post**: a day-by-hour score for Instagram, Facebook, TikTok or YouTube Shorts, a "Good time to post / Don't post yet" check for right now, and your next posts for the week. Scores start from Sprout Social's 2026 study plus health-and-wellness windows, then lean on your Instagram "Most active times" if you enter them, then on your own logged results.
-- **Format & hook**: pick what the post is about and it ranks Stitch formats (plus talking head and faceless graphics), suggests a hook type (Experience, Contrast, Curiosity, Proof) and gives fill-in hook starters you can drop straight into your words.
+- **Format & hook**: pick which story the post is (The Switch, The Evolution, The Stereotype, Roots, The Nurse, My health / my kids' health, The Builder, the books, I built this feature because…, The No's, The Red Tape, The Mission, Check-in, or the Sunday ad). It ranks Stitch formats, suggests a hook type (I'm just a girl who…, Interview question, Hot take, Contrast, Then & now, Open loop, Experience, Curiosity, Proof) and shows the hook's shape. You write the hook in your own words; nothing is pre-filled. Story shape: hook → what happened → one health lesson → "that's why HealthQuest…" → closer.
+- **Ask Claude for help**: type what happened in your own words. When Stitch Studio is open as a Claude artifact, "Get 3 reel ideas" and "Write the script + caption" (an ad script with A/B versions when the story type is Ad) ask Claude right on the page (formats, scenes, on-screen lines, caption, questions for you); the first time, Claude asks permission. On GitHub Pages, "Copy prompt and open Claude" copies the same prompt for you to paste. No keys live in the page.
 - **Post log**: log each post's numbers a couple of days after it goes up. Times, formats and hooks that beat your usual post move up. Download or load the log as CSV.
 
 ## Shared across every format
