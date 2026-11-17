@@ -9,6 +9,7 @@ A browser-based maker for 9:16 short videos (Reels, TikTok, YouTube Shorts, Face
 - **Teleprompter**: words scroll up the screen in time with your up-swipes. A side swipe at the end of a clip slides to the next clip.
 - **Scene swipes**: one clip per scene. A swipe or camera move (sideways, or a tilt up or down) carries you to the next clip. The next scene's words can slide in or type out as you swipe.
 - **React & respond**: a video or photo you're reacting to, then you. Choose Stitch, Picture-in-picture, or Split screen.
+- **Explainer cards**: no camera. Your voiceover over animated cards: a headline with accent words, a screenshot or photo that pops in, tags that pop in one by one, a big number that counts up, a "Comment KEYWORD" card with letter tiles, and a Follow card. Paper, dark or solid-color backgrounds. "Stretch cards to fit the voiceover" lines them up with your audio.
 - **Green screen**: your video with the green removed, over a color, photo, or looping video background, with words behind you (still or scrolling).
 
 Green screen also has effects: **Mirror twin** (two of you facing each other), **Sliced** (you split into strips that snap together on a beat), **Big and small** (you jump between tiny and huge), and **Inside the head** (your outline filled with the background photo or video).

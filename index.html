@@ -312,6 +312,9 @@ details.subhead summary{cursor:pointer}
           <button class="card" data-fmt="green">
             <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="9" width="22" height="3" rx="1.5" fill="currentColor" opacity=".35"/><rect x="6" y="15" width="22" height="3" rx="1.5" fill="currentColor" opacity=".35"/><circle cx="17" cy="30" r="5" fill="var(--accent)"/><path d="M8 51 q9-16 18 0" fill="var(--accent)"/></svg>
             <b>Green screen</b><span>You in front of a new background: a photo, a video, or words behind you.</span></button>
+          <button class="card" data-fmt="explain">
+            <svg viewBox="0 0 34 52" aria-hidden="true"><rect x="1" y="1" width="32" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="8" width="20" height="3" rx="1.5" fill="currentColor"/><rect x="7" y="15" width="20" height="11" rx="2" fill="currentColor" opacity=".35"/><rect x="9" y="30" width="16" height="4" rx="2" fill="var(--accent)"/><rect x="11" y="37" width="12" height="4" rx="2" fill="var(--accent)" opacity=".7"/><path d="M26 2 l5 3" stroke="var(--accent)" stroke-width="2"/></svg>
+            <b>Explainer cards</b><span>No camera. Your voiceover over animated cards: headlines, screenshots, pop-in tags, a count-up number.</span></button>
         </div>
         <p class="note">You can switch formats any time. Your words and settings for each format are kept.</p>
         <div class="subhead" id="savedWrap" hidden>
@@ -598,6 +601,40 @@ details.subhead summary{cursor:pointer}
         <ul class="caps" id="caps"></ul>
       </section>
 
+      <!-- CARDS (explainer) -->
+      <section class="step" data-panel="cards" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">One card per beat of your voiceover. Each card can have a headline, a screenshot or photo, pop-in tags and a big number that counts up. End with a comment-keyword card and a follow card.</p>
+        <div class="row"><select id="exKind" aria-label="Card type" style="width:auto;flex:1"><option value="card">Headline card</option><option value="keyword">Comment keyword</option><option value="follow">Follow</option></select><button class="btn sm primary" id="exAdd">Add card</button></div>
+        <ul class="caps" id="exList"></ul>
+        <p class="note">Wrap words in <code>*stars*</code> to make them the accent color. Separate tags with commas.</p>
+      </section>
+
+      <!-- EXPLAINER LOOK -->
+      <section class="step" data-panel="exlook" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <div class="field"><span class="lbl">Background</span>
+          <div class="seg" role="radiogroup" aria-label="Background">
+            <label><input type="radio" name="exTheme" value="paper">Paper</label>
+            <label><input type="radio" name="exTheme" value="dark">Dark</label>
+            <label><input type="radio" name="exTheme" value="bold">Solid color</label>
+          </div></div>
+        <div class="row"><span class="lbl">Accent</span><input type="color" id="exAccent" aria-label="Accent color"><span class="lbl" id="exBgLbl">Background</span><input type="color" id="exBg" aria-label="Background color"></div>
+        <div class="field"><label class="lbl" for="exFont">Font</label>
+          <select id="exFont"><option value="figtree">Figtree</option><option value="poppins">Poppins</option><option value="montserrat">Montserrat</option><option value="archivo">Archivo</option><option value="bricolage">Bricolage Grotesque</option></select></div>
+        <label class="note" style="color:var(--fg)"><input type="checkbox" id="exSwoosh"> Accent swoosh in the corner</label>
+      </section>
+
+      <!-- VOICEOVER (explainer) -->
+      <section class="step" data-panel="voice" hidden>
+        <h2><b class="num"></b><span class="ttl"></span></h2>
+        <p class="lead">Upload your voiceover: a voice memo, an audio file, or a video (only its sound is used). Then match the cards to it.</p>
+        <div class="row"><span class="btn file">Upload voiceover<input type="file" id="voIn" accept="audio/*,video/*"></span><span class="meta" id="voMeta">No voiceover yet</span></div>
+        <div class="row"><button class="btn sm" id="voFit">Stretch cards to fit the voiceover</button><button class="btn sm" id="voClear">Remove</button></div>
+        <p class="note" id="voNote">Or set each card's length to match when you say it: scrub to the moment the next point starts and use <b>Ends here</b> on the card before it.</p>
+        <div class="slider"><label class="lbl" for="voVol">Voiceover volume</label><output id="voVolOut"></output><input type="range" id="voVol" min="0" max="1.5" step="0.05"></div>
+      </section>
+
       <!-- EXPORT -->
       <section class="step" data-panel="export" hidden>
         <h2><b class="num"></b><span class="ttl"></span></h2>
@@ -647,7 +684,8 @@ const IMG_RE = /^\[image:\s*(.+?)\s*\]$/i;
 const FORMATS = {
   prompter:{name:"Teleprompter", steps:[["clips","Upload your swipe clip"],["words","Add your words"],["look","Choose the look"],["sync","Set the timing"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
   scenes:  {name:"Scene swipes", steps:[["clips","Upload your scene clips"],["words","Words for each scene"],["look","Choose the look"],["place","Placement and entrance"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
-  react:   {name:"React & respond", steps:[["reactA","What you're reacting to"],["reactB","Your response"],["layout","Pick the layout"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
+  react:   {explain:2, name:"React & respond", steps:[["reactA","What you're reacting to"],["reactB","Your response"],["layout","Pick the layout"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
+  explain: {explain:4, name:"Explainer cards", steps:[["cards","Build your cards"],["exlook","Choose the look"],["voice","Add your voiceover"],["captions","Add captions"],["export","Export"]]},
   green:   {name:"Green screen", steps:[["fg","Upload your green-screen video"],["bg","Choose your background"],["words","Words behind you"],["look","Choose the look"],["broll","Add b-roll"],["notify","Phone notification"],["captions","Add captions"],["export","Export"]]},
 };
 const SAMPLES = {
@@ -671,6 +709,12 @@ const S = {
     green:[{text:"MYTH", t0:0.6, t1:2.4, pos:"bottom", style:"stamp", anim:"pop"}]
   },
   broll:{prompter:[], scenes:[], react:[], green:[]},
+  ex:{theme:"paper", accent:"#e2603a", bg:"#1f3b5c", font:"figtree", swoosh:true, voVol:1, cards:[
+    {kind:"card", title:"3 things on a *food label* most parents skip", dur:3},
+    {kind:"card", title:"#1 *Added sugars*", pills:"It's its own line, Look at the grams, Not the same as total sugars", dur:4},
+    {kind:"card", title:"Daily added sugar limit for kids 2 to 18", big:"25 g", sub:"American Heart Association", dur:4},
+    {kind:"keyword", title:"Comment", word:"LABEL", sub:"and I'll send you the checklist", dur:3.5},
+    {kind:"follow", title:"FOLLOW", sub:"@pnphealthdecoder", dur:2.5}]},
   notifs:{prompter:[], scenes:[], react:[], green:[]},
   seriesOn:false, seriesText:"", seriesCorner:"tl", seriesX:null, seriesY:null,
   projectId:null, projName:"",
@@ -678,7 +722,7 @@ const S = {
 };
 try { const sv = JSON.parse(localStorage.getItem(STORE) || "null");
   if (sv) for (const k of Object.keys(S)) if (k in sv){
-    if (k === "words" || k === "caps" || k === "broll" || k === "notifs") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
+    if (k === "words" || k === "caps" || k === "broll" || k === "notifs" || k === "ex") S[k] = {...S[k], ...sv[k]}; else S[k] = sv[k]; } } catch(e){}
 delete S.caps["null"]; delete S.broll["null"]; delete S.notifs["null"];
 function persist(){ try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){} if (typeof Rt !== "undefined" && !Rt.restoring){ Rt.unsaved = true; saveLabel(); } }
 const Rt = {T:0, playing:false, exporting:false, analyzing:0, dirty:true, unsaved:false, saving:false, restoring:false};
@@ -1418,7 +1462,152 @@ async function loadFg(file){
   stop(); Rt.T = 0; syncUI(); renderCaps(); changed();
 }
 
-const MODS = {prompter:SWIPE, scenes:SWIPE, react:REACT, green:GREEN};
+/* =============== explainer cards (faceless) =============== */
+const EX = {vo:null, voFile:null};
+const exCards = () => S.ex.cards;
+function exTimes(){ let a = 0; return exCards().map(c => { const t0 = a; a += Math.max(0.5, +c.dur || 3); return [t0, a]; }); }
+const exTotal = () => { const t = exTimes(); return t.length ? t[t.length-1][1] : 3; };
+function exLocate(T){ const ts = exTimes(); for (let i = 0; i < ts.length; i++) if (T < ts[i][1] || i === ts.length - 1) return {i, lt: Math.max(0, T - ts[i][0]), d: ts[i][1] - ts[i][0]}; return {i:-1, lt:0, d:1}; }
+function exFont(w, px, it){ const f = FONTS[S.ex.font] || FONTS.figtree; return `${it ? "italic " : ""}${w} ${px}px "${f.fam}", system-ui, sans-serif`; }
+const exInk = () => S.ex.theme === "paper" ? "#16181d" : "#ffffff";
+const exPillBg = () => S.ex.theme === "paper" ? "#ffffff" : "rgba(255,255,255,.12)";
+let exBgCache = null, exBgKey = "";
+function exBackground(ctx){
+  const key = S.ex.theme + S.ex.bg;
+  if (key !== exBgKey){ exBgKey = key; exBgCache = document.createElement("canvas"); exBgCache.width = W; exBgCache.height = H; const c = exBgCache.getContext("2d");
+    c.fillStyle = S.ex.theme === "paper" ? "#f4f1ea" : S.ex.theme === "dark" ? "#111318" : S.ex.bg; c.fillRect(0, 0, W, H);
+    c.fillStyle = S.ex.theme === "paper" ? "rgba(0,0,0,.08)" : "rgba(255,255,255,.07)";
+    for (let y = 18; y < H; y += 40) for (let x = 18; x < W; x += 40){ c.beginPath(); c.arc(x, y, 2.2, 0, Math.PI*2); c.fill(); } }
+  ctx.drawImage(exBgCache, 0, 0);
+  if (S.ex.swoosh){ ctx.save(); ctx.strokeStyle = S.ex.accent; ctx.lineCap = "round"; ctx.lineWidth = 34;
+    ctx.beginPath(); ctx.moveTo(W - 210, 60); ctx.lineTo(W - 40, -20); ctx.stroke(); ctx.lineWidth = 22; ctx.beginPath(); ctx.moveTo(W - 120, 140); ctx.lineTo(W + 20, 70); ctx.stroke(); ctx.restore(); }
+}
+/* headline with *accent* words, wrapped and centered; returns its height */
+function exTitle(ctx, text, y, px, alpha){
+  const words = []; text.split(/\*+/).forEach((p, k) => p.split(/\s+/).filter(Boolean).forEach(w => words.push({w, em: k % 2 === 1})));
+  const maxW = SAFE.right - SAFE.left, lines = [[]]; let lw = 0;
+  const wid = o => { ctx.font = exFont(o.em ? 900 : 800, px, o.em); return ctx.measureText(o.w).width; }, sp = px*0.28;
+  for (const o of words){ const w = wid(o); if (lines[lines.length-1].length && lw + sp + w > maxW){ lines.push([]); lw = 0; } lw += (lines[lines.length-1].length ? sp : 0) + w; lines[lines.length-1].push(o); }
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.textBaseline = "top";
+  lines.forEach((ln, i) => { const tw = ln.reduce((a, o, k) => a + wid(o) + (k ? sp : 0), 0); let x = (SAFE.left + SAFE.right)/2 - tw/2;
+    for (const o of ln){ ctx.font = exFont(o.em ? 900 : 800, px, o.em); ctx.fillStyle = o.em ? S.ex.accent : exInk(); ctx.fillText(o.w, x, y + i*px*1.18); x += ctx.measureText(o.w).width + sp; } });
+  ctx.restore(); return lines.length*px*1.18;
+}
+const pop = (lt, at, len) => { const q = clamp((lt - at)/(len || 0.32), 0, 1); return q <= 0 ? 0 : q >= 1 ? 1 : 1 + 2.2*Math.pow(q - 1, 3) + 1.2*Math.pow(q - 1, 2); };
+function exPill(ctx, text, cx, cy, s, px){
+  if (s <= 0) return; ctx.save(); ctx.translate(cx, cy); ctx.scale(s, s); ctx.globalAlpha *= clamp(s, 0, 1);
+  ctx.font = exFont(700, px); const tw = ctx.measureText(text).width, h = px*1.7, w = tw + px*2.2;
+  ctx.shadowColor = "rgba(0,0,0,.18)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6; ctx.fillStyle = exPillBg(); rr(ctx, -w/2, -h/2, w, h, h/2); ctx.fill();
+  ctx.shadowColor = "transparent"; ctx.fillStyle = S.ex.accent; ctx.beginPath(); ctx.arc(-w/2 + px*0.85, 0, px*0.26, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = exInk(); ctx.textBaseline = "middle"; ctx.textAlign = "left"; ctx.fillText(text, -w/2 + px*1.45, 2); ctx.restore();
+}
+function exCount(text, q){ const m = String(text).match(/^(\D*?)([\d][\d,]*(?:\.\d+)?)(.*)$/); if (!m) return text;
+  const raw = m[2].replace(/,/g, ""), dec = (raw.split(".")[1] || "").length, v = parseFloat(raw)*q;
+  let s = v.toFixed(dec); if (m[2].includes(",")) s = Number(s).toLocaleString("en-US", {minimumFractionDigits:dec, maximumFractionDigits:dec}); return m[1] + s + m[3]; }
+function exDrawCard(ctx, c, lt, d){
+  const cx = (SAFE.left + SAFE.right)/2;
+  if (c.kind === "keyword"){
+    let y = (SAFE.top + SAFE.bottom)/2 - 240; y += exTitle(ctx, c.title || "Comment", y, 96, pop(lt, 0, 0.3)) + 60;
+    const letters = [...(c.word || "").toUpperCase()].slice(0, 10), n = letters.length || 1, gap = 18, size = Math.min(150, (SAFE.right - SAFE.left - gap*(n-1))/n);
+    let x = cx - (n*size + (n-1)*gap)/2;
+    letters.forEach((L, k) => { const s = pop(lt, 0.35 + k*0.12, 0.3); if (s > 0){ ctx.save(); ctx.translate(x + size/2, y + size/2); ctx.scale(s, s);
+      ctx.fillStyle = exPillBg(); ctx.strokeStyle = S.ex.accent; ctx.lineWidth = 7; rr(ctx, -size/2, -size/2, size, size, 18); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = S.ex.accent; ctx.font = exFont(900, size*0.62); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(L, 0, size*0.04); ctx.restore(); } x += size + gap; });
+    if (c.sub) exTitle(ctx, c.sub, y + size + 70, 56, pop(lt, 0.4 + n*0.12, 0.3));
+    return;
+  }
+  if (c.kind === "follow"){
+    const s = pop(lt, 0.05, 0.35)*(1 + 0.035*Math.sin(Math.max(0, lt - 0.4)*6)), w = 640, h = 190, y = (SAFE.top + SAFE.bottom)/2 - 120;
+    if (s > 0){ ctx.save(); ctx.translate(cx, y); ctx.scale(s, s);
+      ctx.fillStyle = "#2ec5c2"; rr(ctx, -w/2 - 12, -h/2 - 8, w, h, h/2); ctx.fill(); ctx.fillStyle = S.ex.accent; rr(ctx, -w/2 + 12, -h/2 + 8, w, h, h/2); ctx.fill();
+      ctx.fillStyle = "#121318"; rr(ctx, -w/2, -h/2, w, h, h/2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = exFont(900, 104); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText((c.title || "FOLLOW").toUpperCase(), 0, 6); ctx.restore(); }
+    if (c.sub){ ctx.save(); ctx.globalAlpha *= clamp((lt - 0.4)/0.3, 0, 1); ctx.fillStyle = exInk(); ctx.font = exFont(900, 82); ctx.textAlign = "center"; ctx.textBaseline = "top";
+      let px = 82; while (px > 40 && ctx.measureText(c.sub).width > SAFE.right - SAFE.left){ px -= 4; ctx.font = exFont(900, px); } ctx.fillText(c.sub, cx, y + 200); ctx.restore(); }
+    return;
+  }
+  let y = SAFE.top + 40; const rise = (1 - ease(clamp(lt/0.35, 0, 1)))*30;
+  y += exTitle(ctx, c.title || "", y + rise, 76, clamp(lt/0.3, 0, 1)) + 36;
+  const img = c.img ? IMAGES.get(c.img) : null;
+  if (img && img.naturalWidth){
+    const mw = SAFE.right - SAFE.left, mh = c.big ? 420 : 600, sc = Math.min(mw/img.naturalWidth, mh/img.naturalHeight), w = img.naturalWidth*sc, h = img.naturalHeight*sc, s = pop(lt, 0.25, 0.4);
+    if (s > 0){ ctx.save(); ctx.translate(cx, y + h/2); ctx.scale(0.9 + 0.1*s, 0.9 + 0.1*s); ctx.globalAlpha *= clamp(s, 0, 1);
+      ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10; ctx.fillStyle = "#fff"; rr(ctx, -w/2 - 8, -h/2 - 8, w + 16, h + 16, 22); ctx.fill();
+      ctx.shadowColor = "transparent"; rr(ctx, -w/2, -h/2, w, h, 16); ctx.clip(); ctx.drawImage(img, -w/2, -h/2, w, h); ctx.restore(); }
+    y += h + 50;
+  }
+  if (c.big){
+    const q = ease(clamp((lt - 0.3)/0.9, 0, 1)), a = clamp((lt - 0.25)/0.2, 0, 1); let px = 230; ctx.save(); ctx.globalAlpha *= a; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.font = exFont(900, px); while (px > 90 && ctx.measureText(c.big).width > SAFE.right - SAFE.left){ px -= 10; ctx.font = exFont(900, px); }
+    ctx.fillStyle = exInk(); ctx.fillText(exCount(c.big, q), cx, y); ctx.restore(); y += px*1.05;
+    if (c.sub){ ctx.save(); ctx.globalAlpha *= clamp((lt - 1)/0.3, 0, 1); ctx.fillStyle = S.ex.theme === "paper" ? "#5a6172" : "rgba(255,255,255,.75)"; ctx.font = exFont(600, 44); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(c.sub, cx, y); ctx.restore(); y += 70; }
+  } else if (c.sub){ ctx.save(); ctx.globalAlpha *= clamp((lt - 0.3)/0.3, 0, 1); ctx.fillStyle = S.ex.theme === "paper" ? "#5a6172" : "rgba(255,255,255,.75)"; ctx.font = exFont(600, 46); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(c.sub, cx, y); ctx.restore(); y += 80; }
+  const pills = (c.pills || "").split(",").map(x => x.trim()).filter(Boolean).slice(0, 6);
+  if (pills.length){ const px = 44, step = px*2.25, block = pills.length*step, startY = (!img && !c.big) ? Math.max(y + step/2, (SAFE.top + SAFE.bottom)/2 - block/2 + step/2) : y + step/2;
+    pills.forEach((t, k) => exPill(ctx, t, cx + (k % 2 ? 40 : -40)*(pills.length > 1 ? 1 : 0), startY + k*step, pop(lt, 0.5 + k*0.32, 0.3), px)); y = startY + block - step/2; }
+  return y;
+}
+const EXPLAIN = {
+  total: exTotal,
+  render(ctx, T){
+    exBackground(ctx); const {i, lt, d} = exLocate(T), c = exCards()[i]; if (!c) return;
+    const enter = i > 0 ? 1 - ease(clamp(lt/0.28, 0, 1)) : 0;
+    ctx.save(); ctx.translate(enter*W*0.18, 0); ctx.globalAlpha = 1 - enter*0.6;
+    if (c.kind === "card"){ // measure once at full size, then center the whole stack in the safe zone
+      ctx.save(); ctx.globalAlpha = 0; const end = exDrawCard(ctx, c, 99, d); ctx.restore();
+      const top = SAFE.top + 40, off = Math.max(0, ((SAFE.top + SAFE.bottom) - (top + end))/2 - 40); ctx.translate(0, off); }
+    exDrawCard(ctx, c, lt, d); ctx.restore();
+  },
+  sync(playing){ if (EX.vo){ const d = EX.vo.duration || 0; playSync(EX.vo, clamp(Rt.T, 0, d), playing && Rt.T < d - 0.05, 0.3); } },
+  lanes(){ const L = exTimes().map(([a, b], k) => ({row:0, t0:a, t1:b, color: k % 2 ? "--laneB" : "--laneA", label: String(k + 1)}));
+    if (EX.vo) L.push({row:1, t0:0, t1:Math.min(EX.vo.duration || 0, exTotal()), color:"--cap", label:"Voiceover"}); return L; },
+  legend: [["--laneA","Cards"],["--cap","Voiceover"]],
+  hasAudio: () => !!EX.vo,
+  ready: () => true,
+};
+async function exLoadVo(file){
+  if (EX.vo) unregVideo(EX.vo); EX.vo = null; EX.voFile = null;
+  let v; try { v = await openVideo(file); } catch(e){ $("voMeta").textContent = "That file wouldn't open. Try MP3, M4A, WAV, MP4 or MOV."; throw e; }
+  regVideo(v, () => S.ex.voVol); EX.vo = v; EX.voFile = file; $("voMeta").textContent = `${file.name} · ${(v.duration||0).toFixed(1)}s`; exVoNote();
+}
+function exVoNote(){ const n = $("voNote"); if (!EX.vo){ n.className = "note"; return; } const vd = EX.vo.duration || 0, ct = exTotal();
+  if (Math.abs(vd - ct) > 0.4){ n.className = "note warn"; n.textContent = `Your cards run ${ct.toFixed(1)}s and the voiceover runs ${vd.toFixed(1)}s. Stretch the cards to fit, or set each card's length with Ends here.`; }
+  else { n.className = "note ok"; n.textContent = "Cards and voiceover line up."; } }
+function exRenderList(){
+  const ul = $("exList"); ul.innerHTML = ""; const ts = exTimes();
+  exCards().forEach((c, i) => {
+    const li = document.createElement("li"); li.className = "cap ex";
+    const head = document.createElement("div"); head.className = "brHead";
+    const nm = document.createElement("span"); nm.textContent = `${i + 1}. ${c.kind === "keyword" ? "Comment keyword" : c.kind === "follow" ? "Follow" : "Headline card"} · ${ts[i][0].toFixed(1)}–${ts[i][1].toFixed(1)}s`;
+    const acts = document.createElement("span"); acts.className = "acts"; acts.style.marginLeft = "auto";
+    const b = (t, lab, fn) => { const x = document.createElement("button"); x.className = "btn sm"; x.textContent = t; x.setAttribute("aria-label", lab); x.title = lab; x.onclick = fn; acts.append(x); };
+    b("Show", `Jump to card ${i+1}`, () => seek(ts[i][0] + Math.min(1.4, (ts[i][1] - ts[i][0])*0.8)));
+    b("↑", "Move up", () => { if (i){ [exCards()[i-1], exCards()[i]] = [exCards()[i], exCards()[i-1]]; exChanged(); } });
+    b("↓", "Move down", () => { if (i < exCards().length - 1){ [exCards()[i+1], exCards()[i]] = [exCards()[i], exCards()[i+1]]; exChanged(); } });
+    b("✕", "Remove card", () => { exCards().splice(i, 1); exChanged(); });
+    head.append(nm, acts); li.append(head);
+    const field = (label, key, ph, full) => { const l = document.createElement("label"); if (full) l.style.gridColumn = "1/-1"; l.textContent = label; const inp = document.createElement("input"); inp.type = "text"; inp.value = c[key] || ""; inp.placeholder = ph || "";
+      inp.addEventListener("input", () => { c[key] = inp.value; persist(); Rt.dirty = true; }); l.append(inp); li.append(l); };
+    if (c.kind === "card"){ field("Headline", "title", "A full video editor for *Claude*", true); field("Tags (commas between)", "pills", "Free, Open source", true); field("Big number", "big", "87,000"); field("Small line", "sub", "stars on GitHub");
+      const l = document.createElement("label"); l.textContent = "Picture"; const row = document.createElement("span"); row.className = "row";
+      const up = document.createElement("span"); up.className = "btn sm file"; up.textContent = c.img ? "Replace" : "Add";
+      const fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; up.append(fi);
+      fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const key = "card:" + f.name.replace(/[\[\]]/g, ""), img = new Image(); img.src = URL.createObjectURL(f); img.dataset.name = key; img.dataset.size = f.size; img.dataset.broll = "1"; img._file = f;
+        try { await img.decode(); } catch(e){ return; } IMAGES.set(key.toLowerCase(), img); c.img = key.toLowerCase(); persist(); exRenderList(); seek(ts[i][0] + 1); };
+      row.append(up); if (c.img){ const x = document.createElement("button"); x.className = "btn sm"; x.textContent = "Remove"; x.onclick = () => { c.img = null; persist(); exRenderList(); Rt.dirty = true; }; row.append(x); }
+      if (c.img && !IMAGES.get(c.img)){ const w = document.createElement("span"); w.className = "note warn"; w.textContent = "Missing, add it again"; row.append(w); }
+      l.append(row); li.append(l);
+    } else if (c.kind === "keyword"){ field("Top line", "title", "Comment"); field("Keyword", "word", "LABEL"); field("Bottom line", "sub", "and I'll send you the checklist", true); }
+    else { field("Button", "title", "FOLLOW"); field("Your handle", "sub", "@pnphealthdecoder"); }
+    const dl = document.createElement("label"); dl.textContent = "Seconds"; const di = document.createElement("input"); di.type = "number"; di.min = 0.5; di.step = 0.1; di.value = (+c.dur || 3).toFixed(1);
+    di.addEventListener("change", () => { c.dur = clamp(+di.value || 3, 0.5, 60); exChanged(); }); dl.append(di); li.append(dl);
+    const eh = document.createElement("label"); eh.textContent = " "; const eb = document.createElement("button"); eb.className = "btn sm"; eb.textContent = "Ends here"; eb.title = "Make this card end at the playhead";
+    eb.onclick = () => { const t = Rt.T - ts[i][0]; if (t >= 0.5){ c.dur = Math.round(t*10)/10; exChanged(); } }; eh.append(eb); li.append(eh);
+    ul.append(li);
+  });
+}
+function exChanged(){ persist(); exRenderList(); exVoNote(); seek(Math.min(Rt.T, exTotal())); renderCaps(); Rt.dirty = true; }
+const MODS = {prompter:SWIPE, scenes:SWIPE, react:REACT, green:GREEN, explain:EXPLAIN};
 const mod = () => MODS[S.format] || SWIPE;
 const total = () => mod().total();
 
@@ -1434,7 +1623,7 @@ const HIT = []; let drag = null;
 
 /* caption call-out: same stamp look as True/False, pinned to the end, bouncing arrow */
 const CO_LEN = 3;
-const CO_PHRASES = ["Read the caption ↓", "More in the caption ↓", "The answer's in the caption ↓", "True or false? Caption ↓"];
+const CO_PHRASES = ["Read the caption ↓", "More in the caption ↓", "The answer's in the caption ↓", "True or false? Caption ↓", "Tap my name for the link ↓", "Comment PLAY for the link ↓"];
 const coText = t => t.replace(/[\s\u2193\u21E9\u2B07\uFE0F]+$/u, "").trim();
 function capTimes(cp){
   if (cp.style === "callout" && cp.endPin){ const tot = total(); return [Math.max(0, Math.round((tot - CO_LEN)*10)/10), tot]; }
@@ -2050,6 +2239,7 @@ function showStep(){
   if (pid === "broll") renderBroll();
   if (pid === "notify") renderNotifs();
   if (pid === "clips") renderClips();
+  if (pid === "cards") exRenderList();
   if (pid === "words"){ $("words").value = S.words[S.format] || ""; updateSecNote(); updateImgNote(); }
   outs();
 }
@@ -2064,7 +2254,7 @@ function syncUI(){
   for (const n of ["sync","fit","end","pos","sceneIn","em","style","align","layout","timing","corner","keyMode","bgType","behind","gpos"]) radio(n, S[n]);
   for (const id of ["travel","minMove","size","leading","imgScale","clipVol","volA","volB","keySim","keySmooth","keySpill","fgScale","fgX","fgY","fgVol","bgVol","bgDim","fxEvery"]) $(id).value = S[id];
   $("font").value = S.font; $("weight").value = S.weight; $("emCol").value = S.emCol; $("credit").value = S.credit;
-  $("fx").value = S.fx || "none"; fxUI();
+  $("fx").value = S.fx || "none"; fxUI(); if (typeof exLookUI === "function") exLookUI();
   $("keyCol").value = S.keyCol; $("bgCol1").value = S.bgCol1; $("bgCol2").value = S.bgCol2;
   $("seriesOn").checked = !!S.seriesOn; $("seriesText").value = S.seriesText || ""; $("seriesCorner").value = S.seriesCorner || "tl";
   for (const k of ["a","b"]){ const c = RC[k], K = k.toUpperCase(), s = $("s"+K), e = $("e"+K);
@@ -2193,7 +2383,7 @@ const DB = (() => {
   return {put:(st, rec) => run(st, "readwrite", o => o.put(rec)), get:(st, id) => run(st, "readonly", o => o.get(id)),
           all:st => run(st, "readonly", o => o.getAll()), del:(st, id) => run(st, "readwrite", o => o.delete(id))};
 })();
-const FMT_NAMES = {prompter:"Teleprompter", scenes:"Scene swipes", react:"React & respond", green:"Green screen"};
+const FMT_NAMES = {prompter:"Teleprompter", scenes:"Scene swipes", react:"React & respond", green:"Green screen", explain:"Explainer cards"};
 const mb = n => n >= 1048576 ? (n/1048576).toFixed(n >= 104857600 ? 0 : 1) + " MB" : Math.max(1, Math.round(n/1024)) + " KB";
 const clock = d => new Date(d).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 function saveLabel(msg, warn){
@@ -2204,13 +2394,14 @@ function saveLabel(msg, warn){
 function gatherMedia(){
   const media = {
     sw: SW.demo ? [] : SW.scenes.filter(sc => sc.file && sc.status !== "error").map(sc => ({file:sc.file, name:sc.name, raw:sc.raw || null, start:sc.start || 0, end:sc.end != null ? sc.end : null, sec:sc.sec != null ? sc.sec : null})),
+    ex: {vo: EX.voFile || null},
     rc: {}, gr: {fg: GR.fg ? {file:GR.fg.file, start:GR.fg.start, end:GR.fg.end} : null, bgImg: GR.bgImgFile || null, bgVid: GR.bgVidFile || null},
     images: [...IMAGES.values()].filter(img => img._file).map(img => ({key:img.dataset.name, size:img.dataset.size || "", broll:!!img.dataset.broll, file:img._file}))
   };
   for (const k of ["a","b"]) media.rc[k] = RC[k] && RC[k].file ? {file:RC[k].file, start:RC[k].start, end:RC[k].end} : null;
   let size = 0; const add = f => { if (f && f.size) size += f.size; };
   media.sw.forEach(m => add(m.file)); add(media.rc.a && media.rc.a.file); add(media.rc.b && media.rc.b.file);
-  add(media.gr.fg && media.gr.fg.file); add(media.gr.bgImg); add(media.gr.bgVid); media.images.forEach(m => add(m.file));
+  add(media.gr.fg && media.gr.fg.file); add(media.gr.bgImg); add(media.gr.bgVid); add(media.ex.vo); media.images.forEach(m => add(m.file));
   return {media, size};
 }
 async function saveProject(){
@@ -2240,6 +2431,7 @@ function clearMedia(){
   if (GR.fg) unregVideo(GR.fg.video); GR.fg = null; $("fgMeta").textContent = "Sample person loaded";
   if (GR.bgVid) unregVideo(GR.bgVid); GR.bgVid = null; GR.bgVidFile = null; $("bgVidMeta").textContent = "No video yet";
   GR.bgImg = null; GR.bgImgFile = null; $("bgImgMeta").textContent = "No photo yet";
+  if (EX.vo) unregVideo(EX.vo); EX.vo = null; EX.voFile = null; $("voMeta").textContent = "No voiceover yet";
   for (const img of IMAGES.values()) try { URL.revokeObjectURL(img.src); } catch(e){}
   IMAGES.clear(); imgVer++; nfCache.clear();
 }
@@ -2264,6 +2456,7 @@ async function restoreMedia(m){
       else { sc.status = "queued"; queue = queue.then(() => analyze(sc)); }
     }
   }
+  if (m.ex && m.ex.vo){ try { await exLoadVo(asFile(m.ex.vo, m.ex.vo.name)); } catch(e){ missing++; } }
   for (const k of ["a","b"]){ const it = m.rc && m.rc[k]; if (!it) continue;
     await loadReact(k, asFile(it.file, it.file.name)); if (RC[k]){ RC[k].start = it.start; RC[k].end = it.end; } mountReactTrim(k); }
   if (m.gr){
@@ -2331,6 +2524,24 @@ $("saveBtn").addEventListener("click", saveProject);
 $("newProj").addEventListener("click", newProject);
 $("projName").addEventListener("input", e => { S.projName = e.target.value; persist(); });
 document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s"){ e.preventDefault(); saveProject(); } });
+
+/* explainer controls */
+$("exAdd").addEventListener("click", () => { const k = $("exKind").value;
+  exCards().push(k === "keyword" ? {kind:"keyword", title:"Comment", word:"", sub:"", dur:3.5} : k === "follow" ? {kind:"follow", title:"FOLLOW", sub:"@pnphealthdecoder", dur:2.5} : {kind:"card", title:"", dur:3});
+  exChanged(); seek(exTimes()[exCards().length - 1][0] + 1); });
+$$("input[name=exTheme]").forEach(r => r.addEventListener("change", e => { S.ex.theme = e.target.value; exLookUI(); changed(); }));
+$("exAccent").addEventListener("input", e => { S.ex.accent = e.target.value; changed(); });
+$("exBg").addEventListener("input", e => { S.ex.bg = e.target.value; changed(); });
+$("exFont").addEventListener("change", e => { S.ex.font = e.target.value; changed(); });
+$("exSwoosh").addEventListener("change", e => { S.ex.swoosh = e.target.checked; changed(); });
+$("voVol").addEventListener("input", e => { S.ex.voVol = +e.target.value; $("voVolOut").textContent = Math.round(S.ex.voVol*100) + "%"; changed(); });
+$("voIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; try { await exLoadVo(f); } catch(err){ return; } stop(); Rt.T = 0; exRenderList(); renderCaps(); changed(); });
+$("voClear").addEventListener("click", () => { if (EX.vo) unregVideo(EX.vo); EX.vo = null; EX.voFile = null; $("voMeta").textContent = "No voiceover yet"; exVoNote(); changed(); });
+$("voFit").addEventListener("click", () => { if (!EX.vo) return; const vd = EX.vo.duration || 0, ct = exTotal(); if (!(vd > 0.5)) return; const k = vd/ct;
+  exCards().forEach(c => c.dur = Math.max(0.5, Math.round((+c.dur || 3)*k*10)/10)); const diff = Math.round((vd - exTotal())*10)/10, last = exCards()[exCards().length - 1]; if (last) last.dur = Math.max(0.5, Math.round((last.dur + diff)*10)/10); exChanged(); });
+function exLookUI(){ radio("exTheme", S.ex.theme); $("exAccent").value = S.ex.accent; $("exBg").value = S.ex.bg; $("exFont").value = S.ex.font; $("exSwoosh").checked = !!S.ex.swoosh;
+  $("exBg").hidden = $("exBgLbl").hidden = S.ex.theme !== "bold"; $("voVol").value = S.ex.voVol; $("voVolOut").textContent = Math.round(S.ex.voVol*100) + "%"; }
+exLookUI();
 
 /* =============== post planner =============== */
 const PSTORE = "stitch-planner-v1";
@@ -2427,15 +2638,16 @@ const FMTS = {
   gsil:["Green screen: inside the head","Your outline filled with footage. Fits \"what's happening inside your body.\""],
   gbig:["Green screen: big and small","Size jumps on each beat. Fits \"tiny habit, big difference.\""],
   talk:["Talking head (Captions)","Just you and captions. Your most personal format."],
+  explain:["Explainer cards (no camera)","Voiceover over animated cards. Fits lists, tools and \"3 things\" posts, and ends on a comment keyword."],
   faceless:["Faceless graphic (Canva)","Your attraction layer for likes, comments and giveaways."],
 };
 const FIT = { // 1–5, my starting judgment; your logged results move it
-  myth:    {react:5, gmirror:5, green:4, scenes:4, prompter:3, talk:3, faceless:3, gsil:2, gbig:2},
+  myth:    {explain:4, react:5, gmirror:5, green:4, scenes:4, prompter:3, talk:3, faceless:3, gsil:2, gbig:2},
   explain: {green:5, gsil:5, prompter:4, scenes:4, talk:3, faceless:3, gbig:2, react:2, gmirror:2},
-  tip:     {scenes:5, prompter:5, gbig:4, talk:4, green:3, faceless:3, react:2, gmirror:2, gsil:2},
-  story:   {talk:5, prompter:4, scenes:3, green:3, gsil:2, faceless:2, react:1, gmirror:2, gbig:1},
+  tip:     {explain:5, scenes:5, prompter:5, gbig:4, talk:4, green:3, faceless:3, react:2, gmirror:2, gsil:2},
+  story:   {explain:1, talk:5, prompter:4, scenes:3, green:3, gsil:2, faceless:2, react:1, gmirror:2, gbig:1},
   react:   {react:5, gmirror:4, green:4, talk:3, scenes:3, prompter:2, faceless:2, gsil:2, gbig:2},
-  promo:   {faceless:5, scenes:4, react:4, talk:4, green:3, prompter:3, gbig:3, gmirror:2, gsil:2},
+  promo:   {explain:5, faceless:5, scenes:4, react:4, talk:4, green:3, prompter:3, gbig:3, gmirror:2, gsil:2},
 };
 const TOPICS = {myth:"Myth or fact", explain:"Explain it like I'm 10", tip:"How-to tip", story:"Clinic story", react:"Responding to a claim", promo:"Book / giveaway / HealthQuest"};
 const HOOK_FOR = {myth:"contrast", explain:"curiosity", tip:"experience", story:"experience", react:"contrast", promo:"curiosity"};
@@ -2500,7 +2712,7 @@ $("hkFam").addEventListener("change", e => { P.hkFam = e.target.value; pSave(); 
 $("hkTpl").addEventListener("change", e => { $("hkText").value = HOOKS[P.hkFam][+e.target.value]; });
 $("hkCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("hkText").value); $("hkMsg").textContent = "Copied."; } catch(e){ $("hkText").select(); $("hkMsg").textContent = "Press Cmd+C to copy."; } });
 $("hkUse").addEventListener("click", () => {
-  const fmt = S.format && S.format !== "react" ? S.format : "prompter", hook = $("hkText").value.trim(); if (!hook) return;
+  const fmt = ["prompter","scenes","green"].includes(S.format) ? S.format : "prompter", hook = $("hkText").value.trim(); if (!hook) return;
   const cur = S.words[fmt] || "", isSample = cur === SAMPLES[fmt];
   S.words[fmt] = isSample ? hook : hook + "\n\n" + cur; persist();
   if (S.format === fmt) { $("words").value = S.words[fmt]; updateSecNote(); }
