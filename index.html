@@ -247,6 +247,9 @@ details.subhead summary{cursor:pointer}
         <div class="field"><label class="lbl" for="stType">Story type</label><select id="stType"></select></div>
         <div class="field"><label class="lbl" for="stHookType">Hook type</label><select id="stHookType"></select></div>
       </div>
+      <div class="field"><label class="lbl" for="stCloser">Closer</label>
+        <select id="stCloser"></select>
+        <p class="note" id="stCloserNote"></p></div>
       <div class="row" id="clLive" hidden><button class="btn primary" id="clWrite">Plan this post with Claude</button><button class="btn sm" id="clIdeas">Get 3 reel ideas</button><button class="btn sm" id="clStop" hidden>Stop</button></div>
       <p class="note" id="clLiveNote" hidden>Claude picks anything you left on "Let Claude pick" and gives you the format, hooks, scenes, the script to say, on-screen lines, the caption, what to record, and questions for you. The first time, Claude asks your permission.</p>
       <div id="clOutWrap" hidden><div id="clOut" style="white-space:pre-wrap;border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:8px 0;max-height:640px;overflow:auto;font-size:14px;line-height:1.5"></div>
@@ -2755,10 +2758,31 @@ const STORY_CONTEXT = [
   "- My story so far: years in clinic; NASPGHAN, where everyone talked about childhood obesity and I knew nothing could scale; version 0 was a questionnaire for kids I wanted to run at work; the therapy pill early on, around trying to get my own kid support at school; version 1 of HealthQuest; my first win at NASPGHAN Baby Shark Tank; launch Dec 2025. I fought becoming a Filipina nurse and it became my calling. I played tennis. Kapwa matters to me. I wrote the HealthQuest Stories books, starting with one to explain HealthQuest to my daughter.",
   "- Weekly mix: 2 story posts, 1 Building HealthQuest post, 1 Sunday ad.",
   "- Privacy: no names, schools or diagnoses for my daughters; nothing internal about my employer; my clinic patients don't use HealthQuest, never imply they do.",
-  "- My closer options: (1) 'I'm April, a pediatric nurse practitioner and mom, building HealthQuest one story at a time. Link's in my bio. As always, be kind to others, and love yourself. Until next time!' (2) 'I'm April, just a girl trying to save healthcare up to $19 billion. Follow along, and find HealthQuest in my bio. Be kind to others, and love yourself. Until next time!' (3) 'I'm April. Part 2 is next. Be kind to others, and love yourself.'"
 ].join("\n");
 const FMT_LIST = () => Object.values(FMTS).map(f => f[0]).join("; ");
 const RULES = "Rules: write in my voice. Plain words, contractions, short and varied sentences, no marketing polish, no stock phrases. Don't invent any fact, number, name, date or event about my life; where a detail is missing, write [ASK APRIL: ...]. Never call HealthQuest an app; never say download or install. Any health fact needs a source from AAP/HealthyChildren, NASPGHAN/GIKids, NAMI, NEDA, CDC or WHO; my own experience doesn't. Money claims say 'up to $19 billion'. Storytelling: I'm the main character; every post carries my perspective or opinion, not just facts (story = topic + perspective); talk to one person, so use 'you' more than 'I'; don't only teach, only sell or only show expertise; on-screen text short enough to read at a glance (about 6 words a line), never rushed. Don't add feelings or reactions I didn't state. No weight-focused words or hashtags (no #ChildhoodObesity, no weight loss); HealthQuest never uses weight talk. No 'tips' hashtags, since this account is story, not tips.";
+const CLOSERS = [
+  {g:"standard", t:"I'm April, a pediatric nurse practitioner and mom, building HealthQuest one story at a time. Link's in my bio. As always, be kind to others, and love yourself. Until next time!"},
+  {g:"standard", t:"I'm April, just a girl trying to save healthcare up to $19 billion. Follow along, and find HealthQuest in my bio. Be kind to others, and love yourself. Until next time!"},
+  {g:"standard", t:"I'm April. Nurse, mom, and the girl behind HealthQuest. If this hit home, follow along. Be kind to others, and love yourself."},
+  {g:"standard", t:"I'm April, a pediatric nurse practitioner turning my story into something kids can use. HealthQuest is in my bio. Be kind to others, and love yourself. Until next time!"},
+  {g:"mission", t:"Most people talk about money earned. I'm talking about money saved. I'm April. Follow along. Be kind to others, and love yourself."},
+  {g:"mission", t:"One more step toward $19 billion. I'm April, and I'll see you in the next one. Be kind to others, and love yourself."},
+  {g:"series", t:"I'm April. Part 2 is next. Be kind to others, and love yourself."},
+  {g:"series", t:"And that's not even the wild part. Part 2 tomorrow. Be kind to others, and love yourself."},
+  {g:"ad", t:"The first quest is free. Link's in my bio. I'm April, and I built this for kids like yours."},
+  {g:"ad", t:"Try it with your kids this week. HealthQuest, link in my bio. Be kind to others, and love yourself."},
+  {g:"checkin", t:"That's where I'm at, honestly. Tell me how I'm doing. I'm April. Be kind to others, and love yourself."},
+];
+const CL_GROUP_NAME = {standard:"Standard", mission:"Mission", series:"Mini-series (Part 2 next)", ad:"Ad", checkin:"Check-in"};
+if (!P.clLast) P.clLast = {};
+function closerGroup(){ const t = $("stType").value, h = $("stHookType").value;
+  if (t === "ad") return "ad"; if (t === "checkin") return "checkin"; if (h === "openloop") return "series"; if (t === "mission") return "mission"; return "standard"; }
+function autoCloser(){ const g = closerGroup(), ids = CLOSERS.map((c, i) => i).filter(i => CLOSERS[i].g === g), last = P.clLast[g];
+  const pos = ids.indexOf(last); return ids[(pos + 1) % ids.length]; }
+function chosenCloser(){ const v = $("stCloser").value; return v === "auto" ? autoCloser() : +v; }
+function renderCloserNote(){ const i = chosenCloser(); $("stCloserNote").textContent = ($("stCloser").value === "auto" ? `Next up (${CL_GROUP_NAME[CLOSERS[i].g]}, rotates so you don't repeat): ` : "") + CLOSERS[i].t; }
+function useCloser(){ const i = chosenCloser(); P.clLast[CLOSERS[i].g] = i; pSave(); renderCloserNote(); return CLOSERS[i].t; }
 function stInputs(){
   const t = $("stType").value, h = $("stHookType").value;
   return {
@@ -2768,7 +2792,7 @@ function stInputs(){
   };
 }
 function claudePrompt(){
-  const x = stInputs();
+  const x = stInputs(); x.closer = useCloser();
   if (x.isAd) return [STORY_CONTEXT, "", RULES, "No testimonials and nothing implying my clinic patients use HealthQuest.", "",
     "Write a HealthQuest ad for an off day.", `Hook type: ${x.hookType}`, x.hook ? `My hook draft: ${x.hook}` : "", x.story ? `What it's about, in my words:\n${x.story}` : "", "",
     "Give me 2 versions (A and B to test). For each:",
@@ -2777,7 +2801,7 @@ function claudePrompt(){
     "- The spoken script, line by line, 15 to 30 seconds out loud, marking scene changes",
     "- What's on screen in each scene (my face, a HealthQuest screen recording, a book, etc.)",
     "- One clear call to action (for example: the first quest is free, link in my bio)",
-    "- A short caption (40 to 80 words) with #PediatricNursePractitioner",
+    `- A short caption (40 to 80 words), ending with exactly this closer, word for word: "${x.closer}", then #PediatricNursePractitioner`,
     "- Questions for me about anything you had to guess"].filter(Boolean).join("\n");
   return [STORY_CONTEXT, "", RULES, "",
     "Plan my next @pnphealthdecoder story post.", "",
@@ -2791,7 +2815,7 @@ function claudePrompt(){
     "5. Scenes: what I do and what's on screen in each.",
     "6. The spoken script: exactly what I say, line by line, 20 to 45 seconds out loud, scene changes marked.",
     "7. On-screen line 1 and line 2 (two lines max).",
-    "8. A caption of 130 to 155 words before the closer, with [CLOSER] where my closer goes, the source if there's a health fact, and five hashtags including #PediatricNursePractitioner.",
+    `8. A caption of 130 to 155 words before the closer, then exactly this closer, word for word: "${x.closer}". Then the source if there's a health fact, and five hashtags including #PediatricNursePractitioner. Also put the same closer as the last line of the spoken script.`,
     "9. What to record or dig up (photos, clips, screenshots) so I can reuse it in other posts.",
     "10. Questions for me about anything you had to guess."].join("\n");
 }
@@ -2869,6 +2893,8 @@ $("lgCsvIn").addEventListener("change", async e => { const f = e.target.files[0]
     if (o.at && o.plat && !seen.has(o.at + o.plat)){ P.log.push(o); seen.add(o.at + o.plat); n++; } }
   pSave(); $("lgMsg").textContent = `Loaded ${n} post${n === 1 ? "" : "s"}.`; e.target.value = ""; pRender(); });
 fillSel($("lgFmt"), FMTS); fillSel($("lgTopic"), TOPICS); fillSel($("pTopic"), TOPICS); fillSel($("hkFam"), HOOK_NAME);
+{ const sel = $("stCloser"); sel.append(new Option("Auto: rotate the closer that fits this post", "auto")); CLOSERS.forEach((c, i) => sel.append(new Option(`${CL_GROUP_NAME[c.g]}: ${c.t.slice(0, 60)}…`, i))); }
+for (const id of ["stCloser", "stType", "stHookType"]) $(id).addEventListener("change", renderCloserNote);
 for (const [id, obj] of [["stType", TOPICS], ["stHookType", HOOK_NAME]]){ const sel = $(id); sel.append(new Option("Let Claude pick", "auto")); for (const k in obj) sel.append(new Option(obj[k], k)); }
 for (const k in HOOK_NAME){ const o = document.createElement("option"); o.value = k; o.textContent = HOOK_NAME[k]; $("lgHook").append(o); }
 { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $("lgAt").value = d.toISOString().slice(0, 16); }
@@ -2885,6 +2911,7 @@ if (S.projectId && window.indexedDB) openProject(S.projectId, true);   // bring 
 requestAnimationFrame(tick);
 getDownloads();
 P.tab = "fmt"; openPlanner(true);   // Prep is the first screen
+renderCloserNote();
 })();
 </script>
 
