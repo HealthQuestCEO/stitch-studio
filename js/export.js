@@ -78,10 +78,11 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
   for (const r of ranges) {
     const v = vids[r.take];
     await seek(v, r.start);
+    if (overlay && overlay.prepare) await overlay.prepare(done);
     const paint = (running) => {
       const t = done + Math.max(0, v.currentTime - r.start);
       if (track) track.draw(ctx, offset + t, running); else drawCover(ctx, v);
-      if (overlay) overlay(ctx, t, track ? null : v);
+      if (overlay) overlay(ctx, t, track ? null : v, running);
     };
     paint(false);
     if (!started) { rec.start(250); started = true; } else rec.resume();
@@ -98,6 +99,7 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
     });
     rec.pause();
     if (track) track.pauseAll();
+    if (overlay && overlay.pause) overlay.pause();
     done += r.end - r.start;
   }
   rec.resume();

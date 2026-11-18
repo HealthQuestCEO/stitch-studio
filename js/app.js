@@ -4,6 +4,7 @@ import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit, o
 import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
 import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
+import { BrollLayer, FRAMES, newBroll } from './broll.js';
 import { VisualTrack } from './visuals.js';
 
 const $ = (s) => document.querySelector(s);
@@ -29,6 +30,7 @@ const blank = () => ({
   mode: 'camera',       // 'camera' or 'voiceover'
   visuals: [],          // voice-over: {id, kind, name, sec}
   text: defaultText(),  // hook, captions, list
+  broll: [],            // photos/clips over you
   scrub: 0,
 });
 const VO = () => P.mode === 'voiceover';
@@ -36,7 +38,7 @@ let P = blank();
 const urls = {};        // take id -> object URL
 let undoStack = [], redoStack = [];
 
-const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text });
+const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text, broll: P.broll });
 function remember() { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncUndo(); }
 function restore(s) { Object.assign(P, JSON.parse(s)); save(); render(); }
 $('#undo').onclick = () => { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); syncUndo(); };
@@ -111,7 +113,7 @@ function plan() {
   document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { remember(); P.mode = b.dataset.mode; save(); render(); }));
   $('#newReel').onclick = async () => {
     if (!confirm('Start a new reel? This clears the takes and cleanup for the current one.')) return;
-    for (const t of [...P.takes, ...P.visuals]) await store.del('blob:' + t.id);
+    for (const t of [...P.takes, ...P.visuals, ...P.broll]) await store.del('blob:' + t.id);
     P = blank(); undoStack = []; redoStack = []; syncUndo(); save(); render();
   };
 }
@@ -298,14 +300,14 @@ async function stillAt(t) {
     if (VO()) {
       cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
       if (P.visuals.length) await (await getTrack()).still(cx, t);
-      ov(cx, t, null);
+      await ov.prepare(t); ov(cx, t, null);
     } else {
       const loc = locate(t, ranges);
       await loadSrc(urls[P.takes[loc.take].id]);
       await seekTo(loc.src);
       cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
       drawCover(cx, preview);
-      ov(cx, t, preview);
+      await ov.prepare(t); ov(cx, t, preview);
     }
   } finally {
     stillBusy = false;
@@ -325,18 +327,27 @@ async function makeOverlay(part) {
   const behind = { hook: T.hook.on && T.hook.behind, caps: T.caps.on && T.caps.behind, list: T.list.on && T.list.behind };
   const anyBehind = !VO() && (behind.hook || behind.caps || behind.list);
   if (anyBehind) await loadSegmenter();
-  return (ctx, t, src) => {
+  // B-roll times are on the whole reel; Part 2 starts after Part 1.
+  const off = part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0;
+  const br = new BrollLayer(P.broll, (id) => urls[id]);
+  await br.load();
+  const front = { hook: !behind.hook, caps: !behind.caps, list: !behind.list };
+  const fn = (ctx, t, src, running = false) => {
+    const ft = t + off;
+    if (br.coversFull(ft)) { br.draw(ctx, ft, running); drawText(ctx, T, t, undefined, part); return; }
     if (anyBehind && src && !segmenterFailed()) {
       drawText(ctx, T, t, behind, part);
-      if (drawPerson(ctx, src)) {
-        drawText(ctx, T, t, { hook: !behind.hook, caps: !behind.caps, list: !behind.list }, part);
-        return;
-      }
-      drawText(ctx, T, t, { hook: !behind.hook, caps: !behind.caps, list: !behind.list }, part);
+      drawPerson(ctx, src);
+      br.draw(ctx, ft, running);
+      drawText(ctx, T, t, front, part);
       return;
     }
+    br.draw(ctx, ft, running);
     drawText(ctx, T, t, undefined, part);
   };
+  fn.prepare = (t) => br.prepare(t + off);
+  fn.pause = () => br.pauseAll();
+  return fn;
 }
 
 let playing = null;
@@ -360,15 +371,16 @@ $('#playClean').onclick = async () => {
         const t = doneT + Math.max(0, preview.currentTime - r.start);
         cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
         if (track) track.draw(cx, t, true); else drawCover(cx, preview);
-        ov(cx, t, track ? null : preview);
+        ov(cx, t, track ? null : preview, true);
         (run.stop || preview.currentTime >= r.end - 0.02 || preview.ended) ? res() : requestAnimationFrame(chk);
       };
       chk();
     });
     if (track) track.pauseAll();
+    ov.pause();
     doneT += r.end - r.start;
   }
-  preview.pause(); if (track) track.pauseAll();
+  preview.pause(); if (track) track.pauseAll(); ov.pause();
   if (playing === run) { playing = null; $('#playClean').textContent = '▶ Play'; }
 };
 
@@ -536,8 +548,8 @@ function edit() {
   panel.innerHTML = `
     <h1>Edit</h1>
     <div class="tabs">${[['text', 'Text'], ['broll', 'B-roll'], ['trans', 'Transitions'], ['gfx', 'Graphics']].map(([k, n]) =>
-      `<button class="tab ${editTab === k ? 'on' : ''}" data-tab="${k}">${n}${k !== 'text' ? ' <span class="soon">(soon)</span>' : ''}</button>`).join('')}</div>
-    ${editTab !== 'text' ? `<p class="sub" style="margin-top:20px">Coming in the next updates: ${editTab === 'broll' ? 'photos and clips over your voice, with borders, rounded corners, shadow, polaroid, phone screen and notebook paper frames.' : editTab === 'trans' ? 'cut, crossfade, swipes, zoom, flash and whip pan.' : 'arrows, circles, underlines, ✓ / ✗ stamps, sparkles, your logo and your own PNGs.'}</p>` : `
+      `<button class="tab ${editTab === k ? 'on' : ''}" data-tab="${k}">${n}${k === 'trans' || k === 'gfx' ? ' <span class="soon">(soon)</span>' : ''}</button>`).join('')}</div>
+    ${editTab === 'broll' ? brollHTML(len) : editTab !== 'text' ? `<p class="sub" style="margin-top:20px">Coming in the next updates: ${editTab === 'trans' ? 'cut, crossfade, swipes, zoom, flash and whip pan.' : 'arrows, circles, underlines, ✓ / ✗ stamps, sparkles, your logo and your own PNGs.'}</p>` : `
     <div class="scrub">
       <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
       <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
@@ -593,6 +605,7 @@ function edit() {
   $('#back3').onclick = () => go(3);
   $('#go5').onclick = () => go(5);
   document.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { editTab = b.dataset.tab; render(); }));
+  if (editTab === 'broll') { brollBind(); return; }
   if (editTab !== 'text') return;
 
   $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
@@ -601,27 +614,7 @@ function edit() {
   document.querySelectorAll('[data-tap]').forEach((b) => (b.onclick = () => { tapMode = b.dataset.tap; render(); }));
   document.querySelectorAll('details[data-box]').forEach((d) => (d.ontoggle = () => { d.open ? openBoxes.add(d.dataset.box) : openBoxes.delete(d.dataset.box); }));
 
-  // generic inputs
-  document.querySelectorAll('[data-k]').forEach((el) => {
-    const read = () => (el.dataset.type === 'bool' ? el.checked : el.dataset.type === 'num' ? +el.value : el.value);
-    const live = () => {
-      setPath(el.dataset.k, read());
-      const show = document.querySelector(`[data-show="${el.dataset.k}"]`); if (show) show.textContent = el.value;
-      save(); repaint();
-    };
-    el.addEventListener('focus', () => remember(), { once: true });
-    if (el.dataset.live !== undefined) el.oninput = live;
-    el.onchange = () => {
-      if (el.dataset.live === undefined) remember();
-      live();
-      if (el.dataset.re !== undefined || el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'number') render();
-    };
-  });
-  document.querySelectorAll('[data-set]').forEach((b) => (b.onclick = async () => {
-    remember(); setPath(b.dataset.set, b.dataset.val);
-    if (b.dataset.set.endsWith('.font')) await loadFont(b.dataset.val);
-    save(); render();
-  }));
+  bindInputs();
   document.querySelectorAll('[data-preset]').forEach((sel) => (sel.onchange = () => {
     if (sel.value === '') return;
     remember();
@@ -645,18 +638,118 @@ function edit() {
   }));
 }
 
+function bindInputs() {
+  document.querySelectorAll('[data-k]').forEach((el) => {
+    const read = () => (el.dataset.type === 'bool' ? el.checked : el.dataset.type === 'num' ? +el.value : el.value);
+    const live = () => {
+      setPath(el.dataset.k, read());
+      const show = document.querySelector(`[data-show="${el.dataset.k}"]`); if (show) show.textContent = el.dataset.pct !== undefined ? Math.round(el.value * 100) : el.value;
+      save(); repaint();
+    };
+    el.addEventListener('focus', () => remember(), { once: true });
+    if (el.dataset.live !== undefined) el.oninput = live;
+    el.onchange = () => {
+      if (el.dataset.live === undefined) remember();
+      live();
+      if (el.dataset.re !== undefined || el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'number') render();
+    };
+  });
+  document.querySelectorAll('[data-set]').forEach((b) => (b.onclick = async () => {
+    remember(); setPath(b.dataset.set, b.dataset.val);
+    if (b.dataset.set.endsWith('.font')) await loadFont(b.dataset.val);
+    save(); render();
+  }));
+}
+
+// ---------- B-roll tab ----------
+const LAYOUTS = { framed: 'Framed over me', full: 'Full screen' };
+const ENTER = { pop: 'Pop in', fade: 'Fade in', slide: 'Slide up', none: 'None' };
+function brollHTML(len) {
+  const b = (i) => P.broll[i];
+  return `
+    <div class="scrub">
+      <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
+      <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
+      <p class="hint">Move the slider to where a photo or clip should start, then add it. Your voice keeps playing; clip sound is muted.</p>
+    </div>
+    <label class="big gold" style="display:inline-block;cursor:pointer">＋ Add photo or clip at ${fmt(P.scrub)} sec
+      <input type="file" id="addBroll" accept="image/*,video/*" multiple hidden></label>
+    ${P.broll.map((x, i) => `
+    <div class="card">
+      <div class="card-h"><b>${x.kind === 'image' ? '🖼' : '🎞'} ${esc(x.name)}</b>
+        <span><button class="chip ${moveWhat === 'b:' + x.id ? 'on' : ''}" data-bmove="${x.id}" title="Then drag it on the preview">Move on preview</button>
+        <button class="x" data-bdup="${i}" title="Duplicate">⧉</button><button class="x" data-bdel="${i}" title="Remove">✕</button></span></div>
+      <div class="row">
+        <label class="inline">Starts at <input type="number" class="num" min="0" step="0.1" value="${x.start}" data-k="broll.${i}.start" data-type="num"> sec</label>
+        <button class="chip" data-bnow="${i}">Use ${fmt(P.scrub)} sec</button>
+        <label class="inline">for <input type="number" class="num" min="0.3" step="0.1" value="${x.dur}" data-k="broll.${i}.dur" data-type="num"> sec</label>
+        <label class="inline"><select data-k="broll.${i}.layout" data-type="str">${Object.entries(LAYOUTS).map(([k, n]) => `<option value="${k}" ${x.layout === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="inline">Enter <select data-k="broll.${i}.anim" data-type="str">${Object.entries(ENTER).map(([k, n]) => `<option value="${k}" ${x.anim === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      </div>
+      ${x.layout === 'framed' ? `
+      <label>Frame</label>
+      <div class="row">${Object.entries(FRAMES).map(([k, n]) => `<button class="chip ${x.frame === k ? 'on' : ''}" data-set="broll.${i}.frame" data-val="${k}">${n}</button>`).join('')}</div>
+      ${x.frame === 'polaroid' ? `<label class="inline">Caption <input type="text" class="short" data-k="broll.${i}.caption" data-type="str" data-live value="${esc(x.caption)}" placeholder="e.g. Version 1, 2023"></label>` : ''}
+      <label>Size <b data-show="broll.${i}.size">${Math.round(x.size * 100)}</b>%</label>
+      <input type="range" min="0.25" max="0.95" step="0.01" value="${x.size}" data-k="broll.${i}.size" data-type="num" data-live data-pct>
+      <label>Tilt <b data-show="broll.${i}.tilt">${x.tilt}</b>°</label>
+      <input type="range" min="-15" max="15" step="1" value="${x.tilt}" data-k="broll.${i}.tilt" data-type="num" data-live>
+      ${x.frame === 'plain' ? `
+      <label>Border <b data-show="broll.${i}.border">${x.border}</b>px</label>
+      <input type="range" min="0" max="40" value="${x.border}" data-k="broll.${i}.border" data-type="num" data-live>
+      ${swatches(`broll.${i}.borderColor`, x.borderColor)}
+      <label>Rounded corners <b data-show="broll.${i}.radius">${x.radius}</b>px</label>
+      <input type="range" min="0" max="120" value="${x.radius}" data-k="broll.${i}.radius" data-type="num" data-live>` : ''}
+      <label class="inline"><input type="checkbox" data-k="broll.${i}.shadow" data-type="bool" ${x.shadow ? 'checked' : ''}> Drop shadow</label>` : ''}
+    </div>`).join('') || '<p class="sub" style="margin-top:16px">No B-roll yet.</p>'}`;
+}
+function brollBind() {
+  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
+  $('#scrub').onchange = () => { save(); render(); };
+  $('#addBroll').onchange = async (e) => {
+    let at = P.scrub;
+    for (const f of e.target.files) {
+      const id = 'b' + Date.now() + Math.random().toString(36).slice(2, 6);
+      await store.put('blob:' + id, f); urls[id] = URL.createObjectURL(f);
+      remember();
+      const item = newBroll(id, f.type.startsWith('image/') ? 'image' : 'video', f.name, at);
+      P.broll.push(item); moveWhat = 'b:' + id; at += item.dur;
+    }
+    P.broll.sort((a, b) => a.start - b.start); P.scrub = Math.min(P.scrub + 0.3, reelLen() - 0.05);
+    save(); render();
+  };
+  bindInputs();
+  document.querySelectorAll('[data-bmove]').forEach((b) => (b.onclick = () => {
+    moveWhat = 'b:' + b.dataset.bmove; const x = P.broll.find((y) => y.id === b.dataset.bmove);
+    P.scrub = Math.min(x.start + Math.min(0.6, x.dur / 2), reelLen() - 0.05); render();
+  }));
+  document.querySelectorAll('[data-bnow]').forEach((b) => (b.onclick = () => { remember(); P.broll[+b.dataset.bnow].start = +P.scrub.toFixed(2); save(); render(); }));
+  document.querySelectorAll('[data-bdel]').forEach((b) => (b.onclick = () => { remember(); P.broll.splice(+b.dataset.bdel, 1); save(); render(); }));
+  document.querySelectorAll('[data-bdup]').forEach((b) => (b.onclick = () => {
+    const x = P.broll[+b.dataset.bdup];
+    const id = 'b' + Date.now() + Math.random().toString(36).slice(2, 6);
+    store.get('blob:' + x.id).then((bl) => store.put('blob:' + id, bl));
+    urls[id] = urls[x.id];
+    remember(); P.broll.push({ ...x, id, start: +(x.start + x.dur).toFixed(2) }); save(); render();
+  }));
+}
+
 // drag text on the preview
 let dragging = false;
 function dragTo(e) {
   const r = cv.getBoundingClientRect();
   const x = Math.min(0.95, Math.max(0.05, (e.clientX - r.left) / r.width));
   const y = Math.min(0.95, Math.max(0.05, (e.clientY - r.top) / r.height));
-  P.text[moveWhat].x = Math.abs(x - 0.5) < 0.04 ? 0.5 : x; // snap to center
-  P.text[moveWhat].y = y;
+  const target = moveWhat.startsWith('b:') ? P.broll.find((b) => 'b:' + b.id === moveWhat) : P.text[moveWhat];
+  if (!target) return;
+  target.x = Math.abs(x - 0.5) < 0.04 ? 0.5 : x; // snap to center
+  target.y = y;
   repaint();
 }
 cv.addEventListener('pointerdown', (e) => {
-  if (P.step !== 4 || editTab !== 'text') return;
+  if (P.step !== 4 || (editTab !== 'text' && editTab !== 'broll')) return;
+  if (editTab === 'text' && moveWhat.startsWith('b:')) moveWhat = 'caps';
+  if (editTab === 'broll' && !moveWhat.startsWith('b:')) return;
   remember(); dragging = true; cv.setPointerCapture(e.pointerId); dragTo(e);
 });
 cv.addEventListener('pointermove', (e) => dragging && dragTo(e));
@@ -734,7 +827,7 @@ async function buildCovers() {
     let c;
     if (!track) c = await frameAt(urls[P.takes[p.take].id], p.t);
     else { c = document.createElement('canvas'); c.width = W; c.height = H; await track.still(c.getContext('2d'), p.out ?? 0); }
-    ov(c.getContext('2d'), p.out ?? 0, null);
+    await ov.prepare(p.out ?? 0); ov(c.getContext('2d'), p.out ?? 0, null);
     return c;
   };
   coverCanvasFn = coverCanvas;
@@ -785,6 +878,12 @@ function post() {
       if (b) urls[v.id] = URL.createObjectURL(b);
     }
     P.visuals = P.visuals.filter((v) => urls[v.id]);
+    for (const b of P.broll) {
+      if (urls[b.id]) continue;
+      const bl = await store.get('blob:' + b.id);
+      if (bl) urls[b.id] = URL.createObjectURL(bl);
+    }
+    P.broll = P.broll.filter((b) => urls[b.id]);
     presets = (await store.get('presets')) || [];
   } catch (e) { console.warn(e); }
   if (P.step === 2) P.step = P.takes.length ? 3 : 2;
