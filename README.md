@@ -1,49 +1,40 @@
-# Stitch Studio
+# Stitch Studio (v2)
 
-A browser-based maker for 9:16 short videos (Reels, TikTok, YouTube Shorts, Facebook). Everything runs on your own computer. Videos are never uploaded anywhere.
+A simple, step-by-step reel maker for my story reels. Built fresh, without the old code.
 
-**Live:** https://healthquestceo.github.io/stitch-studio/
+**Steps:** 1 Plan → 2 Record → 3 Clean → 4 Edit → 5 Export → 6 Post
 
-## Formats
+Everything runs in Chrome on my laptop. Videos, takes and edits are saved in this browser (IndexedDB). Nothing is uploaded.
 
-- **Teleprompter**: words scroll up the screen in time with your up-swipes. A side swipe at the end of a clip slides to the next clip.
-- **Scene swipes**: one clip per scene. A swipe or camera move (sideways, or a tilt up or down) carries you to the next clip. The next scene's words can slide in or type out as you swipe.
-- **React & respond**: a video or photo you're reacting to, then you. Choose Stitch, Picture-in-picture, or Split screen.
-- **Explainer cards**: no camera. Your voiceover over animated cards: a headline with accent words, a screenshot or photo that pops in, tags that pop in one by one, a big number that counts up, a "Comment KEYWORD" card with letter tiles, and a Follow card. Paper, dark or solid-color backgrounds. "Stretch cards to fit the voiceover" lines them up with your audio.
-- **Green screen**: your video with the green removed, over a color, photo, or looping video background, with words behind you (still or scrolling).
+## What works now (build 1)
 
-Green screen also has effects: **Mirror twin** (two of you facing each other), **Sliced** (you split into strips that snap together on a beat), **Big and small** (you jump between tiny and huge), and **Inside the head** (your outline filled with the background photo or video).
+- **Plan:** pick **Me on camera** or **Voice-over**, then reel name, hook, script.
+- **Record:** record in the browser (front camera) or upload clips from the phone. Several takes. Optional scrolling script with a speed setting.
+- **Voice-over mode:** record or upload just your voice, then add photos, clips or screen recordings to play on screen in order (set seconds for each, or leave blank to share the time evenly). Photos get a slow push-in. Clean and export work the same way.
+- **Clean:** one button.
+  - Cuts pauses longer than 0.5 sec (adjustable under More options).
+  - Cuts repeated lines and false starts, keeping the **last** take. This needs the transcript, which uses Whisper in the browser (transformers.js). The model downloads once on first use, then audio never leaves the laptop.
+  - Shows the transcript with cuts crossed out. Tap anything to put it back or cut it.
+  - Over 30 sec: splits into Part 1 and Part 2 at the end of a sentence.
+- **Export:** MP4, 9:16, 1080×1920, under 30 sec only. Exports each part separately. Cover image picker and download.
+- Undo / redo (Ctrl+Z / Ctrl+Shift+Z) and autosave.
 
-## Post planner
+## Coming next (in this order)
 
-Open it with **Prep & post planner** at the top. The **Prep** tab opens first: pick the question you're answering (from your answer sheet, or your own), type your answer in your own words (saved in the browser per question), and click **Plan this post with Claude**. Hook, story type, hook type and closer are optional under "More options"; the story type comes from the question.
+1. **Text:** hook text, auto captions, "My style" (Poppins Black Italic, white, yellow key words, black outline and shadow, no box), font picker with previews and favorites, CapCut-style caption animations (word-by-word, karaoke highlight), text behind me.
+2. **B-roll and image styles:** photos and clips over my voice, borders, rounded corners, shadow, polaroid, phone screen, notebook paper.
+3. **Transitions and graphics:** cut, crossfade, swipes, zoom, flash, whip pan; arrows, circles, underlines, ✓ / ✗ stamps, sparkles, logo, my own PNGs.
+4. **Post cards:** per-platform caption, time, rules, posted checkboxes.
+5. **Calendar:** month/week plan, import my content calendar.
 
-- **When to post**: a day-by-hour score for Instagram, Facebook, TikTok or YouTube Shorts, a "Good time to post / Don't post yet" check for right now, and your next posts for the week. Scores start from Sprout Social's 2026 study plus health-and-wellness windows, then lean on your Instagram "Most active times" if you enter them, then on your own logged results.
-- **Format & hook**: pick which story the post is (The Switch, The Evolution, The Stereotype, Roots, The Nurse, My health / my kids' health, The Builder, the books, I built this feature because…, The No's, The Red Tape, The Mission, Check-in, or the Sunday ad). It ranks Stitch formats, suggests a hook type (I'm just a girl who…, Interview question, Hot take, Contrast, Then & now, Open loop, Experience, Curiosity, Proof) and shows the hook's shape. You write the hook in your own words; nothing is pre-filled. Story shape: hook → what happened → one health lesson → "that's why HealthQuest…" → closer.
-- **Closers**: a bank of 11 closers grouped by post type (standard, mission, mini-series, ad, check-in). "Auto" rotates to the next one that fits so you don't repeat; or pick one. Claude puts it word for word at the end of the caption and script.
-- **Ask Claude for help**: type what happened in your own words. When Stitch Studio is open as a Claude artifact, "Get 3 reel ideas" and "Write the script + caption" (an ad script with A/B versions when the story type is Ad) ask Claude right on the page (formats, scenes, on-screen lines, caption, questions for you); the first time, Claude asks permission. On GitHub Pages, "Copy prompt and open Claude" copies the same prompt for you to paste. No keys live in the page.
-- **Post log**: log each post's numbers a couple of days after it goes up. Times, formats and hooks that beat your usual post move up. Download or load the log as CSV.
+## Files
 
-## Shared across every format
-
-- Words with `*emphasis*`, `---` section breaks, and inline images
-- Fonts, emphasis styles (bolder, color, marker, underline), text styles
-- B-roll photos with full screen, card, or top-half layouts and fade, slide, or zoom transitions
-- Timed captions and True/False/Myth/Fact stamps with pop, typewriter, word-by-word, or slide-up animation
-- Caption call-out stamp ("Read the caption ↓" and other presets, or custom text): sits on the last 3 seconds by default, has a gently bouncing arrow, and can be dragged in the preview but stays inside the safe zone
-- Phone notification: a text or email banner drops in at any point (with an optional notification sound), opens to a full screen built from your text or your own screenshot when you tap it, then goes picture-in-picture with you or the screen in the corner. The fake screens use generic icons, never a real app's logo
-- Series label: a small corner label that stays on for the whole video (for example READING YOUR LABS · 1). It remembers the last text used and can be dragged
-- Words per clip (Teleprompter and Scene swipes): each clip picks which `---` section it shows, or none, so the scrolling words can ride on whichever clip actually has the swipes
-- Trim & split: a filmstrip editor on every uploaded clip with draggable start/end handles, a scrub-able mini preview, frame-by-frame nudging and Start here / End here. Teleprompter and Scene swipes clips can also be split into separate clips (for videos made as one long take in Edits)
-- Per-layer volume
-- Save progress (button or Cmd/Ctrl+S): saves the whole project, videos and photos included, in this browser. It reopens automatically after a reload, and the Formats screen lists saved projects to open or delete
-- Safe-zone guides (preview only)
-- Export to 1080×1920 with audio (MP4 in recent Chrome and Safari, otherwise WebM)
-
-## Green screen from Canva
-
-Remove your background in Canva, put a solid bright-green rectangle behind you, and download as MP4. Stitch Studio removes the green.
-
-## Hosting
-
-This is a single static file (`index.html`). GitHub Pages serves it from the `main` branch root.
+- `index.html`: page shell
+- `css/app.css`: styles
+- `js/app.js`: steps and screens
+- `js/clean.js`: pause, repeat and false-start detection; kept ranges; split
+- `js/audio.js`: decoding and loudness
+- `js/whisper-worker.js`: in-browser transcript
+- `js/export.js`: MP4 export and cover frames
+- `js/visuals.js`: voice-over visuals timeline
+- `js/store.js`: autosave
