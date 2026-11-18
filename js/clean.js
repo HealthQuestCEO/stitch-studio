@@ -192,3 +192,23 @@ export function suggestSplit(items, takes) {
   cands.sort((a, b) => (Math.abs(a.at - target) - (a.sentence ? 2 : 0)) - (Math.abs(b.at - target) - (b.sentence ? 2 : 0)));
   return { take: cands[0].take, time: cands[0].time };
 }
+
+// Kept words with their time in the finished reel (for captions).
+export function outWords(items, takes, ranges) {
+  const out = [];
+  let acc = 0;
+  const starts = ranges.map((r) => { const a = acc; acc += r.end - r.start; return a; });
+  items.forEach((it, i) => {
+    if (it.type !== 'word' || it.cut) return;
+    const mid = (it.start + it.end) / 2;
+    const k = ranges.findIndex((r) => r.take === it.take && mid >= r.start && mid <= r.end);
+    if (k < 0) return;
+    const r = ranges[k];
+    out.push({
+      i, text: it.fix || it.text, hl: !!it.hl, big: !!it.big,
+      s: starts[k] + Math.max(0, it.start - r.start),
+      e: starts[k] + Math.min(r.end, it.end) - r.start,
+    });
+  });
+  return out;
+}

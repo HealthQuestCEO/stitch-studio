@@ -19,9 +19,19 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - **Export:** MP4, 9:16, 1080×1920, under 30 sec only. Exports each part separately. Cover image picker and download.
 - Undo / redo (Ctrl+Z / Ctrl+Shift+Z) and autosave.
 
+## Build 2: Text (Edit step)
+
+- **Hook text** for the first seconds (from Plan or typed). Put *stars* around a word to highlight it. Pop, bounce or fade in. Part 2 gets its own label.
+- **Auto captions** from the transcript: 1–4 words at a time, karaoke (the word lights up as you say it), word by word, pop, bounce or fade.
+- Tap a caption word to **highlight** it, **make it bigger**, or **fix its spelling**.
+- **List lines** that appear one at a time.
+- **Style** for each: 20 fonts previewed with your words, weight, italic, ALL CAPS, size, text color, highlight color, outline thickness and color, drop shadow. Brand color quick picks plus any color. **Presets** you can save and reuse. Default is My style.
+- **Drag** text on the preview to move it. Scrub to any second to check it.
+- **Behind me:** text sits behind your head and shoulders (MediaPipe person cutout in the browser; on-camera reels).
+- Preview, export and cover images all show the text.
+
 ## Coming next (in this order)
 
-1. **Text:** hook text, auto captions, "My style" (Poppins Black Italic, white, yellow key words, black outline and shadow, no box), font picker with previews and favorites, CapCut-style caption animations (word-by-word, karaoke highlight), text behind me.
 2. **B-roll and image styles:** photos and clips over my voice, borders, rounded corners, shadow, polaroid, phone screen, notebook paper.
 3. **Transitions and graphics:** cut, crossfade, swipes, zoom, flash, whip pan; arrows, circles, underlines, ✓ / ✗ stamps, sparkles, logo, my own PNGs.
 4. **Post cards:** per-platform caption, time, rules, posted checkboxes.
@@ -36,5 +46,7 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - `js/audio.js`: decoding and loudness
 - `js/whisper-worker.js`: in-browser transcript
 - `js/export.js`: MP4 export and cover frames
+- `js/text.js`: hook, captions, list drawing and styles
+- `js/segment.js`: text behind me
 - `js/visuals.js`: voice-over visuals timeline
 - `js/store.js`: autosave

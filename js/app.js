@@ -1,7 +1,9 @@
 import * as store from './store.js';
 import { decodeClip, to16kMono, speechRuns } from './audio.js';
-import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit } from './clean.js';
-import { renderReel, frameAt, pickMime, W, H } from './export.js';
+import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit, outWords } from './clean.js';
+import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
+import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
+import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { VisualTrack } from './visuals.js';
 
 const $ = (s) => document.querySelector(s);
@@ -11,7 +13,7 @@ const STEPS = [
   { n: 1, name: 'Plan' },
   { n: 2, name: 'Record' },
   { n: 3, name: 'Clean' },
-  { n: 4, name: 'Edit', soon: true },
+  { n: 4, name: 'Edit' },
   { n: 5, name: 'Export' },
   { n: 6, name: 'Post', soon: true },
 ];
@@ -26,13 +28,15 @@ const blank = () => ({
   step: 1, prompter: true, prompterSpeed: 30, coverTime: null,
   mode: 'camera',       // 'camera' or 'voiceover'
   visuals: [],          // voice-over: {id, kind, name, sec}
+  text: defaultText(),  // hook, captions, list
+  scrub: 0,
 });
 const VO = () => P.mode === 'voiceover';
 let P = blank();
 const urls = {};        // take id -> object URL
 let undoStack = [], redoStack = [];
 
-const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode });
+const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text });
 function remember() { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncUndo(); }
 function restore(s) { Object.assign(P, JSON.parse(s)); save(); render(); }
 $('#undo').onclick = () => { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); syncUndo(); };
@@ -80,7 +84,7 @@ function go(n) { if (P.step === 2 && n !== 2) stopCamera(); P.step = n; save(); 
 function render() {
   renderSteps();
   ({ 1: plan, 2: record, 3: clean, 4: edit, 5: exportStep, 6: post })[P.step]();
-  if (P.step !== 2) showTakePreview();
+  if (P.step !== 2) repaint(); else if (!cam) { cv.classList.add('hidden'); }
   setTimer(cleanLen());
 }
 
@@ -256,46 +260,107 @@ async function addVisual(file) {
 const fullRanges = () => (P.cleaned ? keptRanges(P.items, P.takes) : P.takes.map((t, i) => ({ take: i, start: 0, end: t.duration })));
 const makeTrack = () => new VisualTrack(P.visuals, (id) => urls[id], total(fullRanges()));
 
-// ---------- preview of the kept parts ----------
-async function showVisualStill() {
-  const c = $('#vcanvas');
-  if (!VO() || !P.visuals.length) { c.classList.add('hidden'); return; }
-  c.classList.remove('hidden'); $('#emptyPreview').classList.add('hidden');
-  const tr = makeTrack(); await tr.load(); await tr.still(c.getContext('2d'), 0);
+// ---------- preview (canvas: video + text, exactly like the export) ----------
+const cv = $('#vcanvas'), cx = cv.getContext('2d');
+let previewTrack = null, previewTrackKey = '';
+async function getTrack() {
+  const key = JSON.stringify([P.visuals, total(fullRanges())]);
+  if (!previewTrack || key !== previewTrackKey) { previewTrack = makeTrack(); previewTrackKey = key; await previewTrack.load(); }
+  return previewTrack;
 }
-function showTakePreview() {
-  $('#emptyPreview').textContent = 'Your 9:16 preview shows here';
-  showVisualStill();
-  preview.srcObject = null; preview.classList.remove('mirror'); preview.muted = false;
-  const t = P.takes[0];
-  if (!t) { preview.removeAttribute('src'); $('#emptyPreview').classList.remove('hidden'); return; }
-  $('#emptyPreview').classList.add('hidden');
-  if (!preview.src || !Object.values(urls).includes(preview.src)) {
-    preview.preload = 'auto'; preview.src = urls[t.id];
-    preview.addEventListener('loadeddata', () => { if (preview.paused && preview.currentTime === 0) preview.currentTime = 0.05; }, { once: true });
+function loadSrc(u) {
+  if (preview.src === u) return Promise.resolve();
+  preview.srcObject = null; preview.classList.remove('mirror'); preview.muted = false; preview.preload = 'auto';
+  preview.src = u;
+  return new Promise((res) => preview.addEventListener('loadeddata', res, { once: true }));
+}
+function seekTo(t) {
+  if (Math.abs(preview.currentTime - t) < 0.01) return Promise.resolve();
+  return new Promise((res) => { preview.addEventListener('seeked', res, { once: true }); preview.currentTime = t; });
+}
+// Find the take and source time for a reel time.
+function locate(t, ranges) {
+  let acc = 0;
+  for (const r of ranges) { const d = r.end - r.start; if (t < acc + d) return { take: r.take, src: r.start + (t - acc) }; acc += d; }
+  const r = ranges[ranges.length - 1];
+  return r ? { take: r.take, src: Math.max(r.start, r.end - 0.04) } : null;
+}
+let stillBusy = false, stillAgain = null;
+async function stillAt(t) {
+  if (playing) return;
+  if (stillBusy) { stillAgain = t; return; }
+  stillBusy = true;
+  try {
+    const ranges = fullRanges();
+    if (!P.takes.length || !ranges.length) { cv.classList.add('hidden'); $('#emptyPreview').classList.remove('hidden'); return; }
+    $('#emptyPreview').classList.add('hidden'); cv.classList.remove('hidden');
+    const ov = await makeOverlay(0);
+    if (VO()) {
+      cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
+      if (P.visuals.length) await (await getTrack()).still(cx, t);
+      ov(cx, t, null);
+    } else {
+      const loc = locate(t, ranges);
+      await loadSrc(urls[P.takes[loc.take].id]);
+      await seekTo(loc.src);
+      cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
+      drawCover(cx, preview);
+      ov(cx, t, preview);
+    }
+  } finally {
+    stillBusy = false;
+    if (stillAgain != null) { const n = stillAgain; stillAgain = null; stillAt(n); }
   }
 }
+let paintRAF = 0;
+function repaint() { cancelAnimationFrame(paintRAF); paintRAF = requestAnimationFrame(() => stillAt(P.scrub || 0)); }
+
+// Builds the text drawer for the whole reel (part 0) or one part (1 or 2).
+async function makeOverlay(part) {
+  const T = JSON.parse(JSON.stringify(P.text));
+  if (!T.hook.text) T.hook.text = P.hook;
+  const ranges = P.cleaned ? keptRanges(P.items, P.takes, part ? P.split : null, part) : fullRanges();
+  T.caps.chunks = P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges), T.caps.n) : null;
+  await Promise.all([ready(T.hook.style), ready(T.caps.style), ready(T.list.style)]);
+  const behind = { hook: T.hook.on && T.hook.behind, caps: T.caps.on && T.caps.behind, list: T.list.on && T.list.behind };
+  const anyBehind = !VO() && (behind.hook || behind.caps || behind.list);
+  if (anyBehind) await loadSegmenter();
+  return (ctx, t, src) => {
+    if (anyBehind && src && !segmenterFailed()) {
+      drawText(ctx, T, t, behind, part);
+      if (drawPerson(ctx, src)) {
+        drawText(ctx, T, t, { hook: !behind.hook, caps: !behind.caps, list: !behind.list }, part);
+        return;
+      }
+      drawText(ctx, T, t, { hook: !behind.hook, caps: !behind.caps, list: !behind.list }, part);
+      return;
+    }
+    drawText(ctx, T, t, undefined, part);
+  };
+}
+
 let playing = null;
 $('#playClean').onclick = async () => {
-  if (playing) { playing.stop = true; preview.pause(); playing = null; $('#playClean').textContent = '▶ Play'; return; }
+  if (playing) { playing.stop = true; preview.pause(); if (previewTrack) previewTrack.pauseAll(); playing = null; $('#playClean').textContent = '▶ Play'; return; }
   if (!P.takes.length) return;
   stopCamera();
-  const ranges = P.cleaned ? keptRanges(P.items, P.takes) : P.takes.map((t, i) => ({ take: i, start: 0, end: t.duration }));
+  const ranges = fullRanges();
+  const ov = await makeOverlay(0);
+  const track = VO() && P.visuals.length ? await getTrack() : null;
   const run = { stop: false }; playing = run; $('#playClean').textContent = '■ Stop';
-  preview.muted = false; $('#emptyPreview').classList.add('hidden');
-  let track = null, doneT = 0;
-  const cv = $('#vcanvas'), cx = cv.getContext('2d');
-  if (VO() && P.visuals.length) { track = makeTrack(); await track.load(); cv.classList.remove('hidden'); }
+  $('#emptyPreview').classList.add('hidden'); cv.classList.remove('hidden');
+  let doneT = 0;
   for (const r of ranges) {
     if (run.stop) break;
-    const u = urls[P.takes[r.take].id];
-    if (preview.src !== u) { preview.src = u; await new Promise((res) => preview.addEventListener('loadedmetadata', res, { once: true })); }
-    preview.currentTime = r.start;
-    await new Promise((res) => preview.addEventListener('seeked', res, { once: true }));
+    await loadSrc(urls[P.takes[r.take].id]);
+    await seekTo(r.start);
     await preview.play();
     await new Promise((res) => {
       const chk = () => {
-        if (track) track.draw(cx, doneT + Math.max(0, preview.currentTime - r.start), true);
+        const t = doneT + Math.max(0, preview.currentTime - r.start);
+        cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
+        if (track) track.draw(cx, t, true); else drawCover(cx, preview);
+        ov(cx, t, track ? null : preview);
         (run.stop || preview.currentTime >= r.end - 0.02 || preview.ended) ? res() : requestAnimationFrame(chk);
       };
       chk();
@@ -303,7 +368,8 @@ $('#playClean').onclick = async () => {
     if (track) track.pauseAll();
     doneT += r.end - r.start;
   }
-  preview.pause(); if (track) track.pauseAll(); if (playing === run) { playing = null; $('#playClean').textContent = '▶ Play'; }
+  preview.pause(); if (track) track.pauseAll();
+  if (playing === run) { playing = null; $('#playClean').textContent = '▶ Play'; }
 };
 
 // ---------- Step 3: Clean ----------
@@ -339,7 +405,7 @@ async function runClean() {
     const samples = await to16kMono(await decodeClip(blob));
     const runs = speechRuns(samples);
     setStatus(`Take ${i + 1} of ${P.takes.length}: getting the transcript…`);
-    const words = window.__NO_WHISPER ? null : await transcribe(samples);
+    const words = window.__FAKE_WORDS ? window.__FAKE_WORDS(i) : window.__NO_WHISPER ? null : await transcribe(samples);
     if (!words) gotWords = false;
     items.push(...buildItems(tk, i, runs, words, P.pauseSec));
   }
@@ -420,21 +486,181 @@ function transcriptHTML() {
   return html;
 }
 
-// ---------- Step 4: Edit (next update) ----------
+// ---------- Step 4: Edit ----------
+let editTab = 'text', moveWhat = 'caps', tapMode = 'hl', presets = [];
+const openBoxes = new Set(['hook', 'caps']);
+const getPath = (path) => path.split('.').reduce((o, k) => o[k], P);
+function setPath(path, val) { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], P)[last] = val; }
+const reelLen = () => total(fullRanges());
+
+function swatches(path, cur) {
+  return `<div class="row sw">${BRAND.map((b) => `<button class="swatch ${cur.toLowerCase() === b.c.toLowerCase() ? 'on' : ''}" style="background:${b.c}" title="${b.name}" data-set="${path}" data-val="${b.c}"></button>`).join('')}
+    <input type="color" value="${cur}" data-k="${path}" data-type="str" title="Any color"></div>`;
+}
+
+function styleEditor(base) {
+  const st = getPath(base);
+  return `<details class="more" data-box="${base}" ${openBoxes.has(base) ? 'open' : ''}><summary>Style: ${esc(st.font)}, ${st.size}px</summary>
+    <label>Font ${tip('Each one shows your words. Tap to use it.')}</label>
+    <div class="fonts">${FONTS.map((f) => `<button class="font ${st.font === f ? 'on' : ''}" data-set="${base}.font" data-val="${f}" style="font-family:'${f}';font-weight:${st.weight};font-style:${st.italic ? 'italic' : 'normal'}">${esc(sampleText())}</button>`).join('')}</div>
+    <div class="row">
+      <label class="inline">Weight <select data-k="${base}.weight" data-type="num">${[400, 700, 900].map((w) => `<option ${st.weight === w ? 'selected' : ''} value="${w}">${w === 900 ? 'Black' : w === 700 ? 'Bold' : 'Regular'}</option>`).join('')}</select></label>
+      <label class="inline"><input type="checkbox" data-k="${base}.italic" data-type="bool" ${st.italic ? 'checked' : ''}> Italic</label>
+      <label class="inline"><input type="checkbox" data-k="${base}.upper" data-type="bool" ${st.upper ? 'checked' : ''}> ALL CAPS</label>
+    </div>
+    <label>Size <b data-show="${base}.size">${st.size}</b>px</label>
+    <input type="range" min="30" max="160" step="2" value="${st.size}" data-k="${base}.size" data-type="num" data-live>
+    <label>Text color</label>${swatches(base + '.color', st.color)}
+    <label>Highlight color ${tip('Used for key words and the karaoke word.')}</label>${swatches(base + '.hl', st.hl)}
+    <label>Outline <b data-show="${base}.outline">${st.outline}</b>px</label>
+    <input type="range" min="0" max="24" value="${st.outline}" data-k="${base}.outline" data-type="num" data-live>
+    ${swatches(base + '.outlineColor', st.outlineColor)}
+    <label class="inline"><input type="checkbox" data-k="${base}.shadow" data-type="bool" ${st.shadow ? 'checked' : ''}> Drop shadow</label>
+    <div class="row" style="margin-top:12px">
+      <select data-preset="${base}"><option value="">Apply a preset…</option><option value="__my">My style (default)</option>${presets.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join('')}</select>
+      <button class="btn" data-savepreset="${base}">Save as preset</button>
+    </div>
+  </details>`;
+}
+const sampleText = () => (P.text.hook.text || P.hook || 'Your words here').split(/\s+/).slice(0, 4).join(' ').replace(/\*/g, '');
+
+const ANIMS = { karaoke: 'Karaoke (word lights up)', word: 'Word by word', pop: 'Pop in', bounce: 'Bounce', fade: 'Fade in', none: 'None' };
+
 function edit() {
+  if (!P.takes.length) { panel.innerHTML = '<h1>Edit</h1><p class="sub">Record a take first.</p>'; return; }
+  loadAllFonts();
+  const T = P.text;
+  const words = P.cleaned && P.transcript ? outWords(P.items, P.takes, fullRanges()) : [];
+  const len = reelLen();
+  if (P.scrub > len) P.scrub = 0;
   panel.innerHTML = `
     <h1>Edit</h1>
-    <p class="sub">Coming in the next updates, in this order:</p>
-    <ul>
-      <li><b>Text:</b> hook text, auto captions, your style, font picker, CapCut-style captions, text behind you</li>
-      <li><b>B-roll:</b> photos and clips over your voice (on-camera reels), borders and frames (polaroid, phone, notebook)</li>
-      <li><b>Transitions:</b> cut, crossfade, swipes, zoom, flash, whip pan</li>
-      <li><b>Graphics:</b> arrows, circles, ✓ / ✗ stamps, sparkles, your logo, your own PNGs</li>
-    </ul>
+    <div class="tabs">${[['text', 'Text'], ['broll', 'B-roll'], ['trans', 'Transitions'], ['gfx', 'Graphics']].map(([k, n]) =>
+      `<button class="tab ${editTab === k ? 'on' : ''}" data-tab="${k}">${n}${k !== 'text' ? ' <span class="soon">(soon)</span>' : ''}</button>`).join('')}</div>
+    ${editTab !== 'text' ? `<p class="sub" style="margin-top:20px">Coming in the next updates: ${editTab === 'broll' ? 'photos and clips over your voice, with borders, rounded corners, shadow, polaroid, phone screen and notebook paper frames.' : editTab === 'trans' ? 'cut, crossfade, swipes, zoom, flash and whip pan.' : 'arrows, circles, underlines, ✓ / ✗ stamps, sparkles, your logo and your own PNGs.'}</p>` : `
+    <div class="scrub">
+      <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
+      <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
+      <div class="row small">Drag on the preview to move:
+        ${[['hook', 'Hook'], ['caps', 'Captions'], ['list', 'List']].map(([k, n]) => `<button class="chip ${moveWhat === k ? 'on' : ''}" data-move="${k}">${n}</button>`).join('')}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><label class="inline big-l"><input type="checkbox" data-k="text.hook.on" data-type="bool" data-re ${T.hook.on ? 'checked' : ''}> Hook text</label>
+        <span class="sub">first ${T.hook.dur} sec</span></div>
+      ${T.hook.on ? `
+      <input type="text" data-k="text.hook.text" data-type="str" data-live value="${esc(T.hook.text)}" placeholder="${esc(P.hook || 'Type your hook')}">
+      <p class="hint">Put *stars* around a word to make it the highlight color, like: I'm *done* giving tips</p>
+      <div class="row">
+        <label class="inline">On screen for <input type="number" min="0.5" max="10" step="0.5" value="${T.hook.dur}" data-k="text.hook.dur" data-type="num" class="num"> sec</label>
+        <label class="inline">Animation <select data-k="text.hook.anim" data-type="str">${['pop', 'bounce', 'fade', 'none'].map((a) => `<option value="${a}" ${T.hook.anim === a ? 'selected' : ''}>${ANIMS[a]}</option>`).join('')}</select></label>
+        ${VO() ? '' : `<label class="inline"><input type="checkbox" data-k="text.hook.behind" data-type="bool" ${T.hook.behind ? 'checked' : ''}> Behind me ${tip('Puts the words behind your head and shoulders. Works best with a plain background and you not moving much.')}</label>`}
+      </div>
+      ${P.split ? `<label class="inline">Part 2 label <input type="text" class="short" data-k="text.hook.part2" data-type="str" data-live value="${esc(T.hook.part2)}"></label>` : ''}
+      ${styleEditor('text.hook.style')}` : ''}
+    </div>
+
+    <div class="card">
+      <div class="card-h"><label class="inline big-l"><input type="checkbox" data-k="text.caps.on" data-type="bool" data-re ${T.caps.on ? 'checked' : ''}> Captions</label>
+        <span class="sub">${words.length ? words.length + ' words' : ''}</span></div>
+      ${!T.caps.on ? '' : !words.length ? `<div class="note">Captions come from the transcript. ${P.cleaned ? 'The transcript didn\'t load, so go back to Clean and press "Clean again" with internet on.' : 'Run Clean first.'}</div>` : `
+      <div class="row">
+        <label class="inline">Words at a time <select data-k="text.caps.n" data-type="num">${[1, 2, 3, 4].map((n) => `<option ${T.caps.n === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="inline">Style <select data-k="text.caps.anim" data-type="str">${Object.entries(ANIMS).map(([k, n]) => `<option value="${k}" ${T.caps.anim === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        ${VO() ? '' : `<label class="inline"><input type="checkbox" data-k="text.caps.behind" data-type="bool" ${T.caps.behind ? 'checked' : ''}> Behind me</label>`}
+        <label class="inline"><input type="checkbox" data-k="text.caps.skipUnderHook" data-type="bool" ${T.caps.skipUnderHook ? 'checked' : ''}> Hide while the hook shows</label>
+      </div>
+      <div class="row small" style="margin-top:12px">Tap a word to:
+        ${[['hl', 'Highlight'], ['big', 'Make bigger'], ['fix', 'Fix spelling']].map(([k, n]) => `<button class="chip ${tapMode === k ? 'on' : ''}" data-tap="${k}">${n}</button>`).join('')}</div>
+      <div class="words">${words.map((w) => `<span class="wd ${w.hl ? 'hl' : ''} ${w.big ? 'bg' : ''}" data-w="${w.i}" data-s="${w.s.toFixed(2)}">${esc(w.text)}</span>`).join(' ')}</div>
+      ${styleEditor('text.caps.style')}`}
+    </div>
+
+    <div class="card">
+      <div class="card-h"><label class="inline big-l"><input type="checkbox" data-k="text.list.on" data-type="bool" data-re ${T.list.on ? 'checked' : ''}> List lines (appear one at a time)</label></div>
+      ${T.list.on ? `
+      <textarea data-k="text.list.lines" data-type="str" data-live placeholder="One line per row, e.g.&#10;$116 more per kid, every year&#10;$19,000 more per kid, lifetime">${esc(T.list.lines)}</textarea>
+      <div class="row">
+        <label class="inline">First line at <input type="number" class="num" min="0" step="0.5" value="${T.list.start}" data-k="text.list.start" data-type="num"> sec</label>
+        <label class="inline">Next line every <input type="number" class="num" min="0.5" step="0.5" value="${T.list.every}" data-k="text.list.every" data-type="num"> sec</label>
+        ${VO() ? '' : `<label class="inline"><input type="checkbox" data-k="text.list.behind" data-type="bool" ${T.list.behind ? 'checked' : ''}> Behind me</label>`}
+      </div>
+      ${styleEditor('text.list.style')}` : ''}
+    </div>
+    `}
     <div class="next"><button class="btn" id="back3">← Clean</button><button class="big" id="go5">Next: Export →</button></div>`;
+
   $('#back3').onclick = () => go(3);
   $('#go5').onclick = () => go(5);
+  document.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { editTab = b.dataset.tab; render(); }));
+  if (editTab !== 'text') return;
+
+  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
+  $('#scrub').onchange = () => save();
+  document.querySelectorAll('[data-move]').forEach((b) => (b.onclick = () => { moveWhat = b.dataset.move; render(); }));
+  document.querySelectorAll('[data-tap]').forEach((b) => (b.onclick = () => { tapMode = b.dataset.tap; render(); }));
+  document.querySelectorAll('details[data-box]').forEach((d) => (d.ontoggle = () => { d.open ? openBoxes.add(d.dataset.box) : openBoxes.delete(d.dataset.box); }));
+
+  // generic inputs
+  document.querySelectorAll('[data-k]').forEach((el) => {
+    const read = () => (el.dataset.type === 'bool' ? el.checked : el.dataset.type === 'num' ? +el.value : el.value);
+    const live = () => {
+      setPath(el.dataset.k, read());
+      const show = document.querySelector(`[data-show="${el.dataset.k}"]`); if (show) show.textContent = el.value;
+      save(); repaint();
+    };
+    el.addEventListener('focus', () => remember(), { once: true });
+    if (el.dataset.live !== undefined) el.oninput = live;
+    el.onchange = () => {
+      if (el.dataset.live === undefined) remember();
+      live();
+      if (el.dataset.re !== undefined || el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'number') render();
+    };
+  });
+  document.querySelectorAll('[data-set]').forEach((b) => (b.onclick = async () => {
+    remember(); setPath(b.dataset.set, b.dataset.val);
+    if (b.dataset.set.endsWith('.font')) await loadFont(b.dataset.val);
+    save(); render();
+  }));
+  document.querySelectorAll('[data-preset]').forEach((sel) => (sel.onchange = () => {
+    if (sel.value === '') return;
+    remember();
+    const base = sel.dataset.preset, cur = getPath(base);
+    const st = sel.value === '__my' ? { ...MY_STYLE, size: cur.size } : { ...presets[+sel.value].style };
+    setPath(base, st); save(); render();
+  }));
+  document.querySelectorAll('[data-savepreset]').forEach((b) => (b.onclick = async () => {
+    const name = prompt('Name this preset (e.g. "Teal hook"):'); if (!name) return;
+    presets.push({ name, style: { ...getPath(b.dataset.savepreset) } });
+    await store.put('presets', presets); toast(`Saved "${name}". It's in "Apply a preset" on every text.`); render();
+  }));
+  document.querySelectorAll('[data-w]').forEach((el) => (el.onclick = () => {
+    const it = P.items[+el.dataset.w];
+    P.scrub = +el.dataset.s + 0.05;
+    if (tapMode === 'fix') {
+      const v = prompt('Fix this word:', it.fix || it.text); if (v == null) return;
+      remember(); it.fix = v.trim() || undefined;
+    } else { remember(); it[tapMode] = !it[tapMode]; }
+    save(); render();
+  }));
 }
+
+// drag text on the preview
+let dragging = false;
+function dragTo(e) {
+  const r = cv.getBoundingClientRect();
+  const x = Math.min(0.95, Math.max(0.05, (e.clientX - r.left) / r.width));
+  const y = Math.min(0.95, Math.max(0.05, (e.clientY - r.top) / r.height));
+  P.text[moveWhat].x = Math.abs(x - 0.5) < 0.04 ? 0.5 : x; // snap to center
+  P.text[moveWhat].y = y;
+  repaint();
+}
+cv.addEventListener('pointerdown', (e) => {
+  if (P.step !== 4 || editTab !== 'text') return;
+  remember(); dragging = true; cv.setPointerCapture(e.pointerId); dragTo(e);
+});
+cv.addEventListener('pointermove', (e) => dragging && dragTo(e));
+cv.addEventListener('pointerup', () => { if (dragging) { dragging = false; save(); } });
 
 // ---------- Step 5: Export ----------
 function exportStep() {
@@ -474,7 +700,7 @@ async function doExport(part) {
   document.querySelectorAll('[data-exp]').forEach((b) => (b.disabled = true));
   setStatus('Exporting… this plays through once, so it takes about as long as the reel.', 0);
   try {
-    const opts = {};
+    const opts = { overlay: await makeOverlay(part) };
     if (VO() && P.visuals.length) {
       opts.track = makeTrack();
       opts.offset = part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0;
@@ -499,14 +725,17 @@ async function buildCovers() {
     let at = (len * (k + 0.5)) / 8;
     for (const r of ranges) { const d = r.end - r.start; if (at <= d) { picks.push({ take: r.take, t: r.start + at }); break; } at -= d; }
   }
-  if (VO()) picks.forEach((p, k) => (p.out = (len * (k + 0.5)) / 8));
+  picks.forEach((p, k) => (p.out = (len * (k + 0.5)) / 8));
+  const ov = await makeOverlay(0);
   if (P.coverTime == null) P.coverTime = picks[0];
   const track = VO() && P.visuals.length ? makeTrack() : null;
   if (track) await track.load();
   const coverCanvas = async (p) => {
-    if (!track) return frameAt(urls[P.takes[p.take].id], p.t);
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
-    await track.still(c.getContext('2d'), p.out ?? 0); return c;
+    let c;
+    if (!track) c = await frameAt(urls[P.takes[p.take].id], p.t);
+    else { c = document.createElement('canvas'); c.width = W; c.height = H; await track.still(c.getContext('2d'), p.out ?? 0); }
+    ov(c.getContext('2d'), p.out ?? 0, null);
+    return c;
   };
   coverCanvasFn = coverCanvas;
   box.innerHTML = '';
@@ -539,7 +768,13 @@ function post() {
 (async function init() {
   try {
     const saved = await store.get('project');
-    if (saved) P = Object.assign(blank(), saved);
+    if (saved) {
+      P = Object.assign(blank(), saved);
+      const d = defaultText(), t = saved.text || {};
+      P.text = { hook: { ...d.hook, ...t.hook, style: { ...d.hook.style, ...(t.hook || {}).style } },
+        caps: { ...d.caps, ...t.caps, style: { ...d.caps.style, ...(t.caps || {}).style } },
+        list: { ...d.list, ...t.list, style: { ...d.list.style, ...(t.list || {}).style } } };
+    }
     for (const t of P.takes) {
       const b = await store.get('blob:' + t.id);
       if (b) urls[t.id] = URL.createObjectURL(b);
@@ -550,6 +785,7 @@ function post() {
       if (b) urls[v.id] = URL.createObjectURL(b);
     }
     P.visuals = P.visuals.filter((v) => urls[v.id]);
+    presets = (await store.get('presets')) || [];
   } catch (e) { console.warn(e); }
   if (P.step === 2) P.step = P.takes.length ? 3 : 2;
   syncUndo(); render();
