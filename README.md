@@ -30,9 +30,17 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - **Behind me:** text sits behind your head and shoulders (MediaPipe person cutout in the browser; on-camera reels).
 - Preview, export and cover images all show the text.
 
+## Build 3: B-roll and image styles (Edit → B-roll)
+
+- Move the slider to a moment, then **add a photo or clip there**. Your voice keeps playing; clip sound is muted.
+- Set when it starts ("Use this second") and how long it stays.
+- **Full screen** or **Framed over me**. Pop, fade or slide in.
+- Frames: **Plain** (border thickness and color, rounded corners), **Polaroid** (with a handwritten caption), **Phone screen**, **Notebook paper** (with tape). Size, tilt and drop shadow for all.
+- Drag framed B-roll on the preview to place it. Duplicate or remove any item.
+- Works in on-camera and voice-over reels, across Part 1 and Part 2, in preview, export and covers.
+
 ## Coming next (in this order)
 
-2. **B-roll and image styles:** photos and clips over my voice, borders, rounded corners, shadow, polaroid, phone screen, notebook paper.
 3. **Transitions and graphics:** cut, crossfade, swipes, zoom, flash, whip pan; arrows, circles, underlines, ✓ / ✗ stamps, sparkles, logo, my own PNGs.
 4. **Post cards:** per-platform caption, time, rules, posted checkboxes.
 5. **Calendar:** month/week plan, import my content calendar.
@@ -48,5 +56,6 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - `js/export.js`: MP4 export and cover frames
 - `js/text.js`: hook, captions, list drawing and styles
 - `js/segment.js`: text behind me
+- `js/broll.js`: B-roll and frames
 - `js/visuals.js`: voice-over visuals timeline
 - `js/store.js`: autosave
