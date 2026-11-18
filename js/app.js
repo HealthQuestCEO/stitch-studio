@@ -5,6 +5,7 @@ import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
 import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
+import * as L from './library.js';
 import { VisualTrack } from './visuals.js';
 
 const $ = (s) => document.querySelector(s);
@@ -674,12 +675,15 @@ function brollHTML(len) {
     </div>
     <label class="big gold" style="display:inline-block;cursor:pointer">＋ Add photo or clip at ${fmt(P.scrub)} sec
       <input type="file" id="addBroll" accept="image/*,video/*" multiple hidden></label>
+    ${libraryHTML()}
+    <h3 style="margin-top:22px">In this reel (${P.broll.length})</h3>
     ${P.broll.map((x, i) => `
     <div class="card">
-      <div class="card-h"><b>${x.kind === 'image' ? '🖼' : '🎞'} ${esc(x.name)}</b>
+      <div class="card-h"><button class="namebtn" data-bmove="${x.id}" title="Show settings">${moveWhat === 'b:' + x.id ? '▾' : '▸'} ${x.kind === 'image' ? '🖼' : '🎞'} ${esc(x.name)} <span class="sub">${fmt(x.start)}–${fmt(x.start + x.dur)} sec</span></button>
         <span><button class="chip ${moveWhat === 'b:' + x.id ? 'on' : ''}" data-bmove="${x.id}" title="Then drag it on the preview">Move on preview</button>
+        ${x.lib ? '<span class="sub">📚 in library</span>' : `<button class="chip" data-bsave="${i}" title="Keep it for future reels">📚 Save to library</button>`}
         <button class="x" data-bdup="${i}" title="Duplicate">⧉</button><button class="x" data-bdel="${i}" title="Remove">✕</button></span></div>
-      <div class="row">
+      ${moveWhat !== 'b:' + x.id ? '' : `<div class="row">
         <label class="inline">Starts at <input type="number" class="num" min="0" step="0.1" value="${x.start}" data-k="broll.${i}.start" data-type="num"> sec</label>
         <button class="chip" data-bnow="${i}">Use ${fmt(P.scrub)} sec</button>
         <label class="inline">for <input type="number" class="num" min="0.3" step="0.1" value="${x.dur}" data-k="broll.${i}.dur" data-type="num"> sec</label>
@@ -700,7 +704,7 @@ function brollHTML(len) {
       ${swatches(`broll.${i}.borderColor`, x.borderColor)}
       <label>Rounded corners <b data-show="broll.${i}.radius">${x.radius}</b>px</label>
       <input type="range" min="0" max="120" value="${x.radius}" data-k="broll.${i}.radius" data-type="num" data-live>` : ''}
-      <label class="inline"><input type="checkbox" data-k="broll.${i}.shadow" data-type="bool" ${x.shadow ? 'checked' : ''}> Drop shadow</label>` : ''}
+      <label class="inline"><input type="checkbox" data-k="broll.${i}.shadow" data-type="bool" ${x.shadow ? 'checked' : ''}> Drop shadow</label>` : ''}`}
     </div>`).join('') || '<p class="sub" style="margin-top:16px">No B-roll yet.</p>'}`;
 }
 function brollBind() {
@@ -719,6 +723,14 @@ function brollBind() {
     save(); render();
   };
   bindInputs();
+  libraryBind();
+  document.querySelectorAll('[data-bsave]').forEach((b) => (b.onclick = async () => {
+    const x = P.broll[+b.dataset.bsave];
+    const cat = libCat !== 'All' ? libCat : (prompt(`Which category? (${L.library().cats.join(', ')})`, L.library().cats[0]) || '').trim();
+    if (!cat) return;
+    await L.addToLibrary(await store.get('blob:' + x.id), x.name, [cat]);
+    x.lib = true; save(); render(); toast(`Saved to your library under "${cat}".`);
+  }));
   document.querySelectorAll('[data-bmove]').forEach((b) => (b.onclick = () => {
     moveWhat = 'b:' + b.dataset.bmove; const x = P.broll.find((y) => y.id === b.dataset.bmove);
     P.scrub = Math.min(x.start + Math.min(0.6, x.dur / 2), reelLen() - 0.05); render();
@@ -732,6 +744,93 @@ function brollBind() {
     urls[id] = urls[x.id];
     remember(); P.broll.push({ ...x, id, start: +(x.start + x.dur).toFixed(2) }); save(); render();
   }));
+}
+
+// ---------- B-roll library ----------
+let libCat = 'All', libSearch = '', libOpen = true, libEditing = null;
+function libraryHTML() {
+  const lib = L.library();
+  if (!lib) return '<p class="sub">Loading your library…</p>';
+  const q = libSearch.toLowerCase();
+  const shown = lib.items.filter((it) => (libCat === 'All' || it.cats.includes(libCat)) && (!q || it.name.toLowerCase().includes(q)));
+  const count = (c) => lib.items.filter((it) => it.cats.includes(c)).length;
+  const upCat = libCat !== 'All' ? libCat : lib.cats[0] || '';
+  return `
+  <details class="card lib" id="libBox" ${libOpen ? 'open' : ''}>
+    <summary><b>📚 B-roll library</b> <span class="sub">${lib.items.length} saved · kept for every reel</span></summary>
+    <div class="row" style="margin-top:10px">
+      <label class="btn" style="margin:0;cursor:pointer">⬆ Add to library<input type="file" id="libUp" accept="image/*,video/*" multiple hidden></label>
+      <label class="inline" style="margin-top:0">into <select id="libUpCat">${lib.cats.map((c) => `<option ${c === upCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">＋ New category…</option></select></label>
+      <input type="text" id="libSearch" class="short" placeholder="Search by name" value="${esc(libSearch)}">
+    </div>
+    <div class="row cats">
+      <button class="chip ${libCat === 'All' ? 'on' : ''}" data-cat="All">All (${lib.items.length})</button>
+      ${lib.cats.map((c) => `<button class="chip ${libCat === c ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)} (${count(c)})</button>`).join('')}
+      <button class="chip" id="catAdd">＋ Category</button><button class="chip" id="catEdit">✎ Edit categories</button>
+    </div>
+    <div class="libgrid">${shown.map((it) => `
+      <div class="tile">
+        <button class="thumb" data-libadd="${it.id}" title="Add to this reel at ${fmt(P.scrub)} sec">
+          ${it.kind === 'image' ? `<img src="${L.libUrl(it.id)}" loading="lazy">` : `<video src="${L.libUrl(it.id)}#t=0.5" muted preload="metadata"></video><span class="play">▶</span>`}</button>
+        <div class="tname" title="${esc(it.name)}">${esc(it.name)}</div>
+        <div class="tcats">${it.cats.map(esc).join(' · ') || '<i>no category</i>'}</div>
+        <div class="tact"><button class="x" data-libcat="${it.id}" title="Categories">🏷</button><button class="x" data-libren="${it.id}" title="Rename">✎</button><button class="x" data-libdel="${it.id}" title="Delete from library">✕</button></div>
+        ${libEditing === it.id ? `<div class="catpick">${lib.cats.map((c) => `<label><input type="checkbox" data-itcat="${esc(c)}" ${it.cats.includes(c) ? 'checked' : ''}> ${esc(c)}</label>`).join('')}<button class="chip on" id="catDone">Done</button></div>` : ''}
+      </div>`).join('') || `<p class="sub">${lib.items.length ? 'Nothing here yet.' : 'Upload the B-roll you reuse (reactions, typing at night, screen recordings, the books) and sort it into categories.'}</p>`}</div>
+    ${shown.length ? `<p class="hint">Tap a tile to add it to this reel at ${fmt(P.scrub)} sec.</p>` : ''}
+  </details>`;
+}
+async function newCategory() {
+  const c = (prompt('New category name:') || '').trim();
+  if (!c) return null;
+  const lib = L.library();
+  if (!lib.cats.includes(c)) await L.setCats([...lib.cats, c]);
+  return c;
+}
+function libraryBind() {
+  const box = $('#libBox'); if (!box) return;
+  box.ontoggle = () => { libOpen = box.open; };
+  $('#libUp').onchange = async (e) => {
+    let cat = $('#libUpCat').value;
+    if (cat === '__new') { cat = await newCategory(); if (!cat) return; }
+    for (const f of e.target.files) await L.addToLibrary(f, f.name, [cat]);
+    toast(`Added ${e.target.files.length} to "${cat}".`); libCat = cat; render();
+  };
+  $('#libUpCat').onchange = async (e) => { if (e.target.value === '__new') { const c = await newCategory(); if (c) libCat = c; render(); } };
+  $('#libSearch').oninput = (e) => { libSearch = e.target.value; const pos = e.target.selectionStart; render(); const el = $('#libSearch'); el.focus(); el.setSelectionRange(pos, pos); };
+  document.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => { libCat = b.dataset.cat; render(); }));
+  $('#catAdd').onclick = async () => { const c = await newCategory(); if (c) { libCat = c; render(); } };
+  $('#catEdit').onclick = async () => {
+    const v = prompt('Your categories, separated by commas. Rename or delete here (items keep the ones that still exist):', L.library().cats.join(', '));
+    if (v == null) return;
+    await L.setCats(v.split(',')); if (!L.library().cats.includes(libCat)) libCat = 'All'; render();
+  };
+  document.querySelectorAll('[data-libadd]').forEach((b) => (b.onclick = async () => {
+    const it = L.library().items.find((x) => x.id === b.dataset.libadd);
+    const id = 'b' + Date.now() + Math.random().toString(36).slice(2, 6);
+    await store.put('blob:' + id, await L.libBlob(it.id)); urls[id] = L.libUrl(it.id);
+    remember();
+    const item = newBroll(id, it.kind, it.name, P.scrub); item.lib = true;
+    P.broll.push(item); P.broll.sort((a, c) => a.start - c.start); moveWhat = 'b:' + id;
+    save(); render(); toast(`Added "${it.name}" at ${fmt(item.start)} sec.`);
+  }));
+  document.querySelectorAll('[data-libdel]').forEach((b) => (b.onclick = async () => {
+    const it = L.library().items.find((x) => x.id === b.dataset.libdel);
+    if (!confirm(`Delete "${it.name}" from your library? Reels that already use it keep their copy.`)) return;
+    await L.removeFromLibrary(it.id); render();
+  }));
+  document.querySelectorAll('[data-libren]').forEach((b) => (b.onclick = async () => {
+    const it = L.library().items.find((x) => x.id === b.dataset.libren);
+    const n = prompt('New name:', it.name); if (n) { await L.renameItem(it.id, n.trim()); render(); }
+  }));
+  document.querySelectorAll('[data-libcat]').forEach((b) => (b.onclick = () => { libEditing = libEditing === b.dataset.libcat ? null : b.dataset.libcat; render(); }));
+  if (libEditing) {
+    document.querySelectorAll('[data-itcat]').forEach((cb) => (cb.onchange = async () => {
+      const cats = [...document.querySelectorAll('[data-itcat]')].filter((x) => x.checked).map((x) => x.dataset.itcat);
+      await L.setItemCats(libEditing, cats);
+    }));
+    $('#catDone').onclick = () => { libEditing = null; render(); };
+  }
 }
 
 // drag text on the preview
@@ -885,6 +984,7 @@ function post() {
     }
     P.broll = P.broll.filter((b) => urls[b.id]);
     presets = (await store.get('presets')) || [];
+    await L.loadLibrary();
   } catch (e) { console.warn(e); }
   if (P.step === 2) P.step = P.takes.length ? 3 : 2;
   syncUndo(); render();
