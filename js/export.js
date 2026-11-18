@@ -48,7 +48,7 @@ export async function makeVideos(urls) {
 }
 
 export async function renderReel(urls, ranges, onProgress = () => {}, opts = {}) {
-  const { track = null, offset = 0 } = opts;
+  const { track = null, offset = 0, overlay = null } = opts;
   if (track) await track.load();
   const mime = pickMime();
   if (!mime) throw new Error('This browser cannot record video. Please use an up-to-date Chrome.');
@@ -78,7 +78,11 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
   for (const r of ranges) {
     const v = vids[r.take];
     await seek(v, r.start);
-    const paint = (running) => track ? track.draw(ctx, offset + done + Math.max(0, v.currentTime - r.start), running) : drawCover(ctx, v);
+    const paint = (running) => {
+      const t = done + Math.max(0, v.currentTime - r.start);
+      if (track) track.draw(ctx, offset + t, running); else drawCover(ctx, v);
+      if (overlay) overlay(ctx, t, track ? null : v);
+    };
     paint(false);
     if (!started) { rec.start(250); started = true; } else rec.resume();
     await v.play();

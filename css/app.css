@@ -95,3 +95,34 @@ input[type=range]{width:260px}
 .cover-strip img.on{border-color:var(--gold)}
 
 @media (max-width:980px){.layout{grid-template-columns:1fr}.preview-wrap{position:static}}
+
+/* edit / text */
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:8px 0 18px}
+.tab{border:0;background:none;padding:10px 14px;font-weight:700;color:var(--muted);border-bottom:3px solid transparent}
+.tab.on{color:var(--teal);border-color:var(--teal)}
+.tab .soon,.chip .soon{font-weight:400;font-size:11px}
+.card{border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:14px 0}
+.card-h{display:flex;justify-content:space-between;align-items:center}
+.big-l{font-size:17px;font-weight:800}
+label.inline{display:inline-flex;gap:6px;align-items:center;margin:10px 14px 0 0;font-weight:600}
+.hint{font-size:13px;color:var(--muted);margin:6px 0}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600}
+.chip.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+.small{font-size:14px;color:var(--muted);gap:8px}
+.words{line-height:2.2;margin-top:10px;max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:10px}
+.wd{padding:2px 4px;border-radius:5px;cursor:pointer}
+.wd:hover{background:#eef1f5}
+.wd.hl{background:#fff3b0;font-weight:800}
+.wd.bg{font-size:1.25em;font-weight:800}
+.swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--line)}
+.swatch.on{outline:3px solid var(--teal);outline-offset:2px}
+.sw input[type=color]{width:38px;height:32px;border:0;background:none}
+.fonts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:260px;overflow:auto}
+.font{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;font-size:19px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.font.on{border:2px solid var(--teal);background:#effaf7}
+input.num{width:70px;border:1px solid var(--line);border-radius:8px;padding:6px}
+input.short{width:200px;border:1px solid var(--line);border-radius:8px;padding:6px}
+select{border:1px solid var(--line);border-radius:8px;padding:6px;font:inherit}
+.scrub{background:#f6f8fb;border-radius:14px;padding:4px 14px 12px}
+.scrub input[type=range]{width:100%}
+#vcanvas{touch-action:none}
