@@ -39,6 +39,15 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - Drag framed B-roll on the preview to place it. Duplicate or remove any item.
 - Works in on-camera and voice-over reels, across Part 1 and Part 2, in preview, export and covers.
 
+## B-roll library
+
+- In Edit → B-roll: **📚 B-roll library**, kept for every reel ("Start a new reel" never clears it).
+- Upload straight into a category, or tap **Save to library** on any B-roll in a reel.
+- Starter categories (from the B-roll shot list): Reactions, Building HealthQuest, Screen recordings, Nurse / clinic, Roots / Filipino, Tennis, Books, Mission / $19B, Mom life. Add, rename or delete categories anytime.
+- Filter by category, search by name, give one item several categories (🏷), rename (✎), delete (✕).
+- Tap a tile to drop it into the reel at the slider's second.
+- Saved in this browser only, like everything else.
+
 ## Coming next (in this order)
 
 3. **Transitions and graphics:** cut, crossfade, swipes, zoom, flash, whip pan; arrows, circles, underlines, ✓ / ✗ stamps, sparkles, logo, my own PNGs.
@@ -56,6 +65,7 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - `js/export.js`: MP4 export and cover frames
 - `js/text.js`: hook, captions, list drawing and styles
 - `js/segment.js`: text behind me
+- `js/library.js`: B-roll library and categories
 - `js/broll.js`: B-roll and frames
 - `js/visuals.js`: voice-over visuals timeline
 - `js/store.js`: autosave
