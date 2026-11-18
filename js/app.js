@@ -1,7 +1,8 @@
 import * as store from './store.js';
 import { decodeClip, to16kMono, speechRuns } from './audio.js';
 import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit } from './clean.js';
-import { renderReel, frameAt, pickMime } from './export.js';
+import { renderReel, frameAt, pickMime, W, H } from './export.js';
+import { VisualTrack } from './visuals.js';
 
 const $ = (s) => document.querySelector(s);
 const panel = $('#panel'), preview = $('#preview');
@@ -23,12 +24,15 @@ const blank = () => ({
   cleaned: false, transcript: false,
   pauseSec: 0.5, split: null,
   step: 1, prompter: true, prompterSpeed: 30, coverTime: null,
+  mode: 'camera',       // 'camera' or 'voiceover'
+  visuals: [],          // voice-over: {id, kind, name, sec}
 });
+const VO = () => P.mode === 'voiceover';
 let P = blank();
 const urls = {};        // take id -> object URL
 let undoStack = [], redoStack = [];
 
-const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript });
+const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode });
 function remember() { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncUndo(); }
 function restore(s) { Object.assign(P, JSON.parse(s)); save(); render(); }
 $('#undo').onclick = () => { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); syncUndo(); };
@@ -85,6 +89,11 @@ function plan() {
   panel.innerHTML = `
     <h1>Plan this reel</h1>
     <p class="sub">Type your hook and script, or skip ahead. Your calendar comes in a later update.</p>
+    <label>How will this reel look?</label>
+    <div class="modes">
+      <button class="mode ${!VO() ? 'on' : ''}" data-mode="camera"><b>🎥 Me on camera</b><span>You talk to the camera.</span></button>
+      <button class="mode ${VO() ? 'on' : ''}" data-mode="voiceover"><b>🎙 Voice-over</b><span>You talk; photos, clips or screen recordings play on screen.</span></button>
+    </div>
     <label>Reel name ${tip('Just for you, so you can find it later.')}</label>
     <input type="text" id="title" placeholder="e.g. The moment at NASPGHAN" value="${esc(P.title)}">
     <label>Hook (first 1–2 seconds)</label>
@@ -95,9 +104,10 @@ function plan() {
       <button class="big" id="go2">Next: Record →</button></div>`;
   ['title', 'hook', 'script'].forEach((k) => ($('#' + k).oninput = (e) => { P[k] = e.target.value; save(); }));
   $('#go2').onclick = () => go(2);
+  document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { remember(); P.mode = b.dataset.mode; save(); render(); }));
   $('#newReel').onclick = async () => {
     if (!confirm('Start a new reel? This clears the takes and cleanup for the current one.')) return;
-    for (const t of P.takes) await store.del('blob:' + t.id);
+    for (const t of [...P.takes, ...P.visuals]) await store.del('blob:' + t.id);
     P = blank(); undoStack = []; redoStack = []; syncUndo(); save(); render();
   };
 }
@@ -107,22 +117,38 @@ let cam = null, recorder = null, recChunks = [], scrollRAF = null;
 
 function record() {
   panel.innerHTML = `
-    <h1>Record</h1>
-    <p class="sub">Talk to the camera. Stumble, pause, repeat a line, it's fine. Step 3 cleans it up. Record as many takes as you want.</p>
+    <h1>${VO() ? 'Record your voice' : 'Record'}</h1>
+    <p class="sub">${VO() ? 'Just talk. Stumble, pause, repeat a line, it\'s fine. Step 3 cleans it up. Then add what plays on screen below.' : 'Talk to the camera. Stumble, pause, repeat a line, it\'s fine. Step 3 cleans it up. Record as many takes as you want.'}</p>
     <div class="row">
-      <button class="big" id="camBtn">${cam ? '● Start recording' : 'Turn on camera'}</button>
-      <label class="btn" style="margin:22px 0 0">⬆ Upload from phone
-        <input type="file" id="upload" accept="video/*" multiple hidden></label>
+      <button class="big" id="camBtn">${cam ? '● Start recording' : VO() ? 'Turn on mic' : 'Turn on camera'}</button>
+      <label class="btn" style="margin:22px 0 0">⬆ Upload ${VO() ? 'voice (audio or video)' : 'from phone'}
+        <input type="file" id="upload" accept="${VO() ? 'audio/*,video/*' : 'video/*'}" multiple hidden></label>
     </div>
     <details class="more"><summary>More options</summary>
       <label><input type="checkbox" id="pOn" ${P.prompter ? 'checked' : ''}> Scroll my script while I record</label>
       <label>Scroll speed ${tip('Pixels per second. Slower if you read slowly.')}</label>
       <input type="range" id="pSpeed" min="10" max="80" value="${P.prompterSpeed}">
     </details>
-    <h3 style="margin-top:26px">Takes (${P.takes.length})</h3>
+    <h3 style="margin-top:26px">${VO() ? 'Voice takes' : 'Takes'} (${P.takes.length})</h3>
     <ul class="takes">${P.takes.map((t, i) => `<li><b>Take ${i + 1}</b><span>${fmt(t.duration)} sec</span>
       <button class="btn" data-play="${i}">▶</button><button class="x" data-del="${i}" title="Remove this take">✕</button></li>`).join('') || '<li>No takes yet.</li>'}</ul>
+    ${VO() ? `<h3 style="margin-top:26px">What plays on screen (${P.visuals.length}) ${tip('Photos, clips or screen recordings. They play in this order. Leave seconds blank to share the time evenly.')}</h3>
+      <label class="btn" style="display:inline-block;margin:0">＋ Add photos, clips or screen recordings
+        <input type="file" id="addVis" accept="image/*,video/*" multiple hidden></label>
+      <ul class="takes vis">${P.visuals.map((v, i) => `<li>${v.kind === 'image' ? `<img src="${urls[v.id]}">` : `<video src="${urls[v.id]}#t=0.5" muted></video>`}
+        <b>${esc(v.name)}</b>
+        <input type="number" min="0.5" step="0.5" placeholder="auto" value="${v.sec || ''}" data-sec="${i}" title="Seconds on screen (blank = auto)"> sec
+        <button class="x" data-up="${i}" title="Move up">↑</button><button class="x" data-dn="${i}" title="Move down">↓</button>
+        <button class="x" data-vdel="${i}" title="Remove">✕</button></li>`).join('') || '<li>Nothing added yet.</li>'}</ul>` : ''}
     <div class="next"><span></span><button class="big" id="go3" ${P.takes.length ? '' : 'disabled'}>Next: Clean it up →</button></div>`;
+  if (VO()) {
+    $('#addVis').onchange = async (e) => { for (const f of e.target.files) await addVisual(f); render(); };
+    document.querySelectorAll('[data-sec]').forEach((el) => (el.onchange = () => { remember(); P.visuals[+el.dataset.sec].sec = +el.value || null; save(); render(); }));
+    const move = (i, d) => { const j = i + d; if (j < 0 || j >= P.visuals.length) return; remember(); [P.visuals[i], P.visuals[j]] = [P.visuals[j], P.visuals[i]]; save(); render(); };
+    document.querySelectorAll('[data-up]').forEach((b) => (b.onclick = () => move(+b.dataset.up, -1)));
+    document.querySelectorAll('[data-dn]').forEach((b) => (b.onclick = () => move(+b.dataset.dn, 1)));
+    document.querySelectorAll('[data-vdel]').forEach((b) => (b.onclick = () => { remember(); P.visuals.splice(+b.dataset.vdel, 1); save(); render(); }));
+  }
 
   $('#camBtn').onclick = async () => {
     if (!cam) { await startCamera(); render(); return; }
@@ -152,12 +178,13 @@ function record() {
 async function startCamera() {
   try {
     cam = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: VO() ? false : { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: { echoCancellation: true, noiseSuppression: true },
     });
-  } catch (e) { toast('Camera blocked. Allow camera and mic in Chrome, then try again.'); }
+  } catch (e) { toast(VO() ? 'Mic blocked. Allow the microphone in Chrome, then try again.' : 'Camera blocked. Allow camera and mic in Chrome, then try again.'); }
 }
 function attachCamera() {
+  if (VO()) { $('#emptyPreview').textContent = '🎙 Mic is on'; $('#emptyPreview').classList.remove('hidden'); $('#vcanvas').classList.add('hidden'); return; }
   preview.src = ''; preview.srcObject = cam; preview.muted = true; preview.classList.add('mirror');
   $('#emptyPreview').classList.add('hidden'); preview.play();
 }
@@ -168,8 +195,8 @@ function stopCamera() {
   stopPrompter();
 }
 function startRecording() {
-  const mime = pickMime();
-  recorder = new MediaRecorder(cam, mime ? { mimeType: mime, videoBitsPerSecond: 12_000_000 } : undefined);
+  const mime = VO() ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported(m)) : pickMime();
+  recorder = new MediaRecorder(cam, mime ? (VO() ? { mimeType: mime } : { mimeType: mime, videoBitsPerSecond: 12_000_000 }) : undefined);
   recChunks = [];
   recorder.ondataavailable = (e) => e.data.size && recChunks.push(e.data);
   recorder.onstop = async () => {
@@ -216,8 +243,29 @@ async function addTake(blob, name) {
   save();
 }
 
+async function addVisual(file) {
+  const kind = file.type.startsWith('image/') ? 'image' : 'video';
+  const id = 'v' + Date.now() + Math.random().toString(36).slice(2, 6);
+  await store.put('blob:' + id, file);
+  urls[id] = URL.createObjectURL(file);
+  remember();
+  P.visuals.push({ id, kind, name: file.name, sec: null });
+  save();
+}
+
+const fullRanges = () => (P.cleaned ? keptRanges(P.items, P.takes) : P.takes.map((t, i) => ({ take: i, start: 0, end: t.duration })));
+const makeTrack = () => new VisualTrack(P.visuals, (id) => urls[id], total(fullRanges()));
+
 // ---------- preview of the kept parts ----------
+async function showVisualStill() {
+  const c = $('#vcanvas');
+  if (!VO() || !P.visuals.length) { c.classList.add('hidden'); return; }
+  c.classList.remove('hidden'); $('#emptyPreview').classList.add('hidden');
+  const tr = makeTrack(); await tr.load(); await tr.still(c.getContext('2d'), 0);
+}
 function showTakePreview() {
+  $('#emptyPreview').textContent = 'Your 9:16 preview shows here';
+  showVisualStill();
   preview.srcObject = null; preview.classList.remove('mirror'); preview.muted = false;
   const t = P.takes[0];
   if (!t) { preview.removeAttribute('src'); $('#emptyPreview').classList.remove('hidden'); return; }
@@ -235,6 +283,9 @@ $('#playClean').onclick = async () => {
   const ranges = P.cleaned ? keptRanges(P.items, P.takes) : P.takes.map((t, i) => ({ take: i, start: 0, end: t.duration }));
   const run = { stop: false }; playing = run; $('#playClean').textContent = '■ Stop';
   preview.muted = false; $('#emptyPreview').classList.add('hidden');
+  let track = null, doneT = 0;
+  const cv = $('#vcanvas'), cx = cv.getContext('2d');
+  if (VO() && P.visuals.length) { track = makeTrack(); await track.load(); cv.classList.remove('hidden'); }
   for (const r of ranges) {
     if (run.stop) break;
     const u = urls[P.takes[r.take].id];
@@ -243,11 +294,16 @@ $('#playClean').onclick = async () => {
     await new Promise((res) => preview.addEventListener('seeked', res, { once: true }));
     await preview.play();
     await new Promise((res) => {
-      const chk = () => (run.stop || preview.currentTime >= r.end - 0.02 || preview.ended) ? res() : requestAnimationFrame(chk);
+      const chk = () => {
+        if (track) track.draw(cx, doneT + Math.max(0, preview.currentTime - r.start), true);
+        (run.stop || preview.currentTime >= r.end - 0.02 || preview.ended) ? res() : requestAnimationFrame(chk);
+      };
       chk();
     });
+    if (track) track.pauseAll();
+    doneT += r.end - r.start;
   }
-  preview.pause(); if (playing === run) { playing = null; $('#playClean').textContent = '▶ Play'; }
+  preview.pause(); if (track) track.pauseAll(); if (playing === run) { playing = null; $('#playClean').textContent = '▶ Play'; }
 };
 
 // ---------- Step 3: Clean ----------
@@ -371,7 +427,7 @@ function edit() {
     <p class="sub">Coming in the next updates, in this order:</p>
     <ul>
       <li><b>Text:</b> hook text, auto captions, your style, font picker, CapCut-style captions, text behind you</li>
-      <li><b>B-roll:</b> photos and clips over your voice, borders and frames (polaroid, phone, notebook)</li>
+      <li><b>B-roll:</b> photos and clips over your voice (on-camera reels), borders and frames (polaroid, phone, notebook)</li>
       <li><b>Transitions:</b> cut, crossfade, swipes, zoom, flash, whip pan</li>
       <li><b>Graphics:</b> arrows, circles, ✓ / ✗ stamps, sparkles, your logo, your own PNGs</li>
     </ul>
@@ -390,6 +446,7 @@ function exportStep() {
     <p class="sub">MP4, 9:16, 1080×1920. Works for Instagram, Facebook, TikTok and YouTube Shorts. No music; add that later in Canva or the app.</p>
     ${!P.takes.length ? '<div class="note bad">Record a take first.</div>' : ''}
     ${!P.cleaned && P.takes.length ? '<div class="note">You haven\'t cleaned this yet. You can still export, but pauses and repeats stay in.</div>' : ''}
+    ${VO() && !P.visuals.length ? '<div class="note bad">Voice-over mode: add photos, clips or screen recordings in Step 2, or the video will be black.</div>' : ''}
     ${mime && !mime.startsWith('video/mp4') ? '<div class="note">This Chrome can\'t save MP4, so it will save WebM. Update Chrome (Settings → About Chrome) to get MP4.</div>' : ''}
     ${parts.map((p, k) => {
       const over = lens[k] >= 30;
@@ -417,7 +474,12 @@ async function doExport(part) {
   document.querySelectorAll('[data-exp]').forEach((b) => (b.disabled = true));
   setStatus('Exporting… this plays through once, so it takes about as long as the reel.', 0);
   try {
-    const { blob, ext } = await renderReel(P.takes.map((t) => urls[t.id]), ranges, (p) => setStatus(`Exporting… ${Math.round(p * 100)}%`, p));
+    const opts = {};
+    if (VO() && P.visuals.length) {
+      opts.track = makeTrack();
+      opts.offset = part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0;
+    }
+    const { blob, ext } = await renderReel(P.takes.map((t) => urls[t.id]), ranges, (p) => setStatus(`Exporting… ${Math.round(p * 100)}%`, p), opts);
     const name = `${(P.title || 'reel').replace(/[^\w\- ]+/g, '').trim() || 'reel'}${part ? ' - Part ' + part : ''}.${ext}`;
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
     window.__lastExport = { size: blob.size, type: blob.type, name };
@@ -437,10 +499,19 @@ async function buildCovers() {
     let at = (len * (k + 0.5)) / 8;
     for (const r of ranges) { const d = r.end - r.start; if (at <= d) { picks.push({ take: r.take, t: r.start + at }); break; } at -= d; }
   }
+  if (VO()) picks.forEach((p, k) => (p.out = (len * (k + 0.5)) / 8));
   if (P.coverTime == null) P.coverTime = picks[0];
+  const track = VO() && P.visuals.length ? makeTrack() : null;
+  if (track) await track.load();
+  const coverCanvas = async (p) => {
+    if (!track) return frameAt(urls[P.takes[p.take].id], p.t);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    await track.still(c.getContext('2d'), p.out ?? 0); return c;
+  };
+  coverCanvasFn = coverCanvas;
   box.innerHTML = '';
   for (const p of picks) {
-    const c = await frameAt(urls[P.takes[p.take].id], p.t);
+    const c = await coverCanvas(p);
     const img = new Image(); img.src = c.toDataURL('image/jpeg', 0.6);
     img.className = P.coverTime && P.coverTime.take === p.take && Math.abs(P.coverTime.t - p.t) < 0.01 ? 'on' : '';
     img.onclick = () => { P.coverTime = p; save(); box.querySelectorAll('img').forEach((x) => x.classList.remove('on')); img.classList.add('on'); };
@@ -448,9 +519,10 @@ async function buildCovers() {
     box.appendChild(img);
   }
 }
+let coverCanvasFn = null;
 async function downloadCover() {
   const p = P.coverTime; if (!p) return;
-  const c = await frameAt(urls[P.takes[p.take].id], p.t);
+  const c = coverCanvasFn ? await coverCanvasFn(p) : await frameAt(urls[P.takes[p.take].id], p.t);
   c.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${P.title || 'reel'} - cover.png`; a.click(); }, 'image/png');
 }
 
@@ -473,6 +545,11 @@ function post() {
       if (b) urls[t.id] = URL.createObjectURL(b);
     }
     P.takes = P.takes.filter((t) => urls[t.id]);
+    for (const v of P.visuals) {
+      const b = await store.get('blob:' + v.id);
+      if (b) urls[v.id] = URL.createObjectURL(b);
+    }
+    P.visuals = P.visuals.filter((v) => urls[v.id]);
   } catch (e) { console.warn(e); }
   if (P.step === 2) P.step = P.takes.length ? 3 : 2;
   syncUndo(); render();

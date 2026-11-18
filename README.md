@@ -8,8 +8,9 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 
 ## What works now (build 1)
 
-- **Plan:** reel name, hook, script.
+- **Plan:** pick **Me on camera** or **Voice-over**, then reel name, hook, script.
 - **Record:** record in the browser (front camera) or upload clips from the phone. Several takes. Optional scrolling script with a speed setting.
+- **Voice-over mode:** record or upload just your voice, then add photos, clips or screen recordings to play on screen in order (set seconds for each, or leave blank to share the time evenly). Photos get a slow push-in. Clean and export work the same way.
 - **Clean:** one button.
   - Cuts pauses longer than 0.5 sec (adjustable under More options).
   - Cuts repeated lines and false starts, keeping the **last** take. This needs the transcript, which uses Whisper in the browser (transformers.js). The model downloads once on first use, then audio never leaves the laptop.
@@ -35,4 +36,5 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - `js/audio.js`: decoding and loudness
 - `js/whisper-worker.js`: in-browser transcript
 - `js/export.js`: MP4 export and cover frames
+- `js/visuals.js`: voice-over visuals timeline
 - `js/store.js`: autosave

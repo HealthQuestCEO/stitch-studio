@@ -74,6 +74,14 @@ input[type=range]{width:260px}
 .phone{position:relative;width:340px;aspect-ratio:9/16;margin:8px auto;background:#111;border-radius:22px;overflow:hidden}
 .phone video{width:100%;height:100%;object-fit:cover;display:block}
 .phone video.mirror{transform:scaleX(-1)}
+#vcanvas{position:absolute;inset:0;width:100%;height:100%}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+.mode{border:2px solid var(--line);background:#fff;border-radius:16px;padding:18px;text-align:left}
+.mode b{display:block;font-size:17px;margin-bottom:4px}
+.mode span{color:var(--muted);font-size:14px}
+.mode.on{border-color:var(--teal);background:#effaf7}
+.vis input[type=number]{width:70px;border:1px solid var(--line);border-radius:8px;padding:6px}
+.vis img,.vis video{width:40px;height:60px;object-fit:cover;border-radius:6px;background:#000}
 .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:14px;padding:30px}
 .rec-dot{position:absolute;bottom:12px;left:12px;color:#fff;background:var(--red);font-weight:800;font-size:13px;padding:3px 10px;border-radius:999px}
 .prompter{position:absolute;left:0;right:0;top:0;height:42%;overflow:hidden;padding-top:40px!important;background:linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,.25));color:#fff;font-size:20px;font-weight:600;line-height:1.5;padding:14px 18px;text-align:left}

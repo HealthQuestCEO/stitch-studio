@@ -47,7 +47,9 @@ export async function makeVideos(urls) {
   return vids;
 }
 
-export async function renderReel(urls, ranges, onProgress = () => {}) {
+export async function renderReel(urls, ranges, onProgress = () => {}, opts = {}) {
+  const { track = null, offset = 0 } = opts;
+  if (track) await track.load();
   const mime = pickMime();
   if (!mime) throw new Error('This browser cannot record video. Please use an up-to-date Chrome.');
   const canvas = document.createElement('canvas');
@@ -76,20 +78,22 @@ export async function renderReel(urls, ranges, onProgress = () => {}) {
   for (const r of ranges) {
     const v = vids[r.take];
     await seek(v, r.start);
-    drawCover(ctx, v);
+    const paint = (running) => track ? track.draw(ctx, offset + done + Math.max(0, v.currentTime - r.start), running) : drawCover(ctx, v);
+    paint(false);
     if (!started) { rec.start(250); started = true; } else rec.resume();
     await v.play();
     await new Promise((res) => {
       const tick = () => {
-        drawCover(ctx, v);
+        paint(true);
         onProgress(Math.min(1, (done + Math.max(0, v.currentTime - r.start)) / totalLen));
         if (v.currentTime >= r.end - 0.01 || v.ended) { v.pause(); res(); return; }
-        if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(tick);
+        if (v.requestVideoFrameCallback && !track) v.requestVideoFrameCallback(tick);
         else requestAnimationFrame(tick);
       };
       tick();
     });
     rec.pause();
+    if (track) track.pauseAll();
     done += r.end - r.start;
   }
   rec.resume();
