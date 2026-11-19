@@ -83,15 +83,18 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 ## Timeline (Edit, above the tabs)
 
 - **One line on top:** ▶ play from the slider, the time, the slider, and **✂ Split here**.
-- **Each take is its own clip** on the main line. Whatever Clean kept shows up per take. Tap a clip to:
-  - set its **volume** (0–200%; over 100% boosts a quiet take) or **Mute** it,
+- **Each take is its own clip** on the main line. Whatever Clean kept shows up per clip.
+- **✂ Split here cuts the clip into two clips** (Take 1a, Take 1b). Each piece works like its own take. Old split lines from earlier reels turn into clips the first time you open Edit.
+- **Tap a clip** to:
+  - set its **volume** (0–200%; over 100% boosts a quiet clip) or **Mute** it,
   - move it **◀ Earlier / Later ▶**,
-  - **🗑 Remove** it (Undo brings it back). To trim, split at the spot and remove that section.
+  - **▶ Play** it, **mirror** it, or **cover it with B-roll** (upload or from the library),
+  - **🗑 Delete** it. B-roll, mirror and graphics after it move up to stay in sync. Undo brings it back.
+  - To trim: split where it should end, then delete the piece you don't want.
 - **＋ at the end of the main line** adds photos or videos. A photo becomes a clip with a slow push-in (3 sec to start; change "Shows for" up to 15 sec). Clean skips photos.
 - **Colors:** teal = video, gold = photo, mint = B-roll, purple = captions (plus thin lines for mirror and graphics).
 - **◆ between clips:** one tap cycles the transition (cut, crossfade, swipes, zoom, flash, whip) and plays it. Yellow means it's not a plain cut. Only shows with 2+ clips.
 - **B-roll lane:** tap a B-roll to set its sound. B-roll is muted (0%) unless you turn it up.
-- **Sections:** split lines show across the timeline. Tap a section to mirror it, cover it with B-roll, play it or remove it.
 
 ## Typed captions (Edit → Text)
 
