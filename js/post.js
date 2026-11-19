@@ -25,6 +25,7 @@ export function defaultSettings() {
       4: { yt: '12:00', meta: '12:30', tt: '15:00' },
     },
     fbMe: '18:00',
+    logo: { on: false, corner: 'tr', size: 0.16, opacity: 0.9 }, // logo on every reel
     mainLink: 'https://discoverhealthquest.com',
     testerOn: true,
     testerEnd: '2026-12-31',

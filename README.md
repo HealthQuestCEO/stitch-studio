@@ -87,6 +87,10 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - Removing a section shortens the reel; B-roll, mirror and graphics after it move up to stay in sync. It shows in Clean as "✂ removed", tap to put it back (or Undo).
 - Colored lanes under the sections show where B-roll, mirror and graphics are.
 
+## Logo on every reel
+
+- Edit → Graphics & stamps → **HealthQuest logo on every reel**. One switch for all reels: corner, size, see-through. "Hide it on this reel only" when one reel shouldn't have it.
+
 ## Coming next
 
 Nothing left on the build list. Next: whatever comes up from real reels.

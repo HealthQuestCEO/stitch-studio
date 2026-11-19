@@ -561,6 +561,9 @@ async function makeOverlay(part) {
   const front = { hook: !behind.hook, caps: !behind.caps, list: !behind.list };
   const gl = new GfxLayer(P.gfx, (id) => urls[id], 'assets/healthquest-logo.png');
   await gl.load();
+  const LG = { ...defaultSettings().logo, ...(S.logo || {}) };
+  let logoImg = null;
+  if (LG.on && P.logoOn !== false) { logoImg = new Image(); logoImg.src = 'assets/healthquest-logo.png'; await logoImg.decode().catch(() => {}); }
   const mirrored = (ft) => P.effects.some((e) => ft >= e.start && ft < e.start + e.dur);
   const fn = (ctx, t, src, running = false) => {
     const ft = t + off;
@@ -575,6 +578,12 @@ async function makeOverlay(part) {
       drawText(ctx, T, t, undefined, part);
     }
     gl.draw(ctx, ft);
+    if (logoImg && logoImg.naturalWidth) { // the logo on every reel
+      const w = W * LG.size, h = (w * logoImg.naturalHeight) / logoImg.naturalWidth, m = W * 0.04;
+      const x = LG.corner.includes('l') ? m : W - w - m;
+      const y = LG.corner.includes('t') ? H * 0.07 : H - h - H * 0.12; // clear of the top bar and the caption area
+      ctx.save(); ctx.globalAlpha = LG.opacity; ctx.drawImage(logoImg, x, y, w, h); ctx.restore();
+    }
   };
   fn.prepare = (t) => br.prepare(t + off);
   fn.pause = () => br.pauseAll();
@@ -1168,7 +1177,17 @@ function transBind() {
 const GANIM = { pop: 'Pop in', slam: 'Stamp slam', draw: 'Draw on', fade: 'Fade in', none: 'None' };
 const gIcon = { stampCheck: '✅', stampX: '❌', check: '✔', cross: '✖', arrow: '➜', circle: '◯', underline: '﹏', sparkle: '✨', star: '💥', emoji: '😀', logo: '🟢', png: '🖼' };
 function gfxHTML(len) {
+  const LG = { ...defaultSettings().logo, ...(S.logo || {}) };
   return `${scrubBlock(len, 'Move the slider to the moment, tap a graphic to add it there, then drag it on the preview.')}
+  <div class="card">
+    <div class="card-h"><label class="inline big-l" style="margin:0"><input type="checkbox" id="logoOn" ${LG.on ? 'checked' : ''}> HealthQuest logo on every reel</label><span class="sub">applies to all reels</span></div>
+    ${LG.on ? `<div class="row">
+      <label class="inline">Corner <select id="logoCorner">${[['tl', 'Top left'], ['tr', 'Top right'], ['bl', 'Bottom left'], ['br', 'Bottom right']].map(([k, n]) => `<option value="${k}" ${LG.corner === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="inline">Size <input type="range" id="logoSize" min="0.08" max="0.3" step="0.01" value="${LG.size}"></label>
+      <label class="inline">See-through <input type="range" id="logoOp" min="0.3" max="1" step="0.05" value="${LG.opacity}"></label>
+      <label class="inline"><input type="checkbox" id="logoHere" ${P.logoOn === false ? 'checked' : ''}> Hide it on this reel only</label></div>
+      <p class="hint">Top and bottom spots stay clear of Instagram's and TikTok's buttons and your captions. Check the preview.</p>` : ''}
+  </div>
   <div class="gpal">${Object.entries(GFX).filter(([k]) => k !== 'png').map(([k, n]) => `<button class="gbtn" data-gadd="${k}"><span>${gIcon[k]}</span>${n}</button>`).join('')}
     <label class="gbtn" style="cursor:pointer"><span>🖼</span>Upload PNG<input type="file" id="gpng" accept="image/png,image/*" hidden></label></div>
   <h3 style="margin-top:20px">In this reel (${P.gfx.length})</h3>
@@ -1191,6 +1210,14 @@ function gfxHTML(len) {
 }
 function gfxBind() {
   bindScrub(); bindInputs(); bindTimed();
+  const setLogo = async (k, v, re = true) => { S.logo = { ...defaultSettings().logo, ...(S.logo || {}), [k]: v }; await saveSettings(); re ? render() : repaint(); };
+  $('#logoOn').onchange = (e) => setLogo('on', e.target.checked);
+  if ($('#logoCorner')) {
+    $('#logoCorner').onchange = (e) => setLogo('corner', e.target.value);
+    $('#logoSize').oninput = (e) => setLogo('size', +e.target.value, false);
+    $('#logoOp').oninput = (e) => setLogo('opacity', +e.target.value, false);
+    $('#logoHere').onchange = (e) => { P.logoOn = e.target.checked ? false : true; save(); repaint(); };
+  }
   document.querySelectorAll('[data-gadd]').forEach((b) => (b.onclick = () => {
     remember();
     const g = newGfx(newId('g'), b.dataset.gadd, P.scrub, b.dataset.gadd === 'emoji' ? { text: '🔥' } : {});
