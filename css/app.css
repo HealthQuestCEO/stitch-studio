@@ -202,3 +202,18 @@ mark{background:#ffe066;border-radius:3px;padding:0 2px}
 .reelrow{padding:6px 0;border-bottom:1px solid var(--line)}
 .reelrow b{flex:1}
 .reelrow.cur{background:#effaf7}
+
+/* split tool */
+.splitbox{background:#f6f8fb;border-radius:14px;padding:10px 14px 12px;margin:8px 0 14px}
+.tl{position:relative;margin-top:8px;cursor:pointer;padding-bottom:4px}
+.secs{display:flex;gap:3px;height:46px}
+.sec{border:2px solid var(--line);background:#fff;border-radius:8px;font-weight:800;font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:28px;overflow:hidden;padding:0}
+.sec small{font-weight:500;font-size:10px;color:var(--muted);white-space:nowrap}
+.sec.on{border-color:var(--teal);background:#effaf7}
+.lanes{position:relative;height:16px;margin-top:3px}
+.lane{position:absolute;height:4px;border-radius:2px}
+.lane.lb{top:0;background:#e8a33d}.lane.lm{top:6px;background:#8a63d2}.lane.lg{top:12px;background:#0f8b8d}
+.cutmark{position:absolute;top:-10px;transform:translateX(-50%);border:0;background:var(--ink);color:#fff;border-radius:6px;font-size:11px;padding:1px 4px;cursor:pointer}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--red);pointer-events:none}
+.secact{margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.btn.danger{color:var(--red);border-color:#f3c0bf}
