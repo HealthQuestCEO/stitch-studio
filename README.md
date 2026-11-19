@@ -70,9 +70,19 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - Edit any card's caption by hand (Reset brings the template back). Tick Posted on each; when all five are ticked the reel is marked Posted.
 - Settings (apply to every reel): post times for Tue/Wed/Thu, Facebook personal time, links, tester line and end date, sign-off, closers, hashtags.
 
+## Build 6: Calendar (home screen) and multiple reels
+
+- **Plan** opens on your calendar: month or week view, Today, back/forward.
+- **Import calendar** (.xlsx or .csv, read in the browser). Brings in date, type, topic, hook, script, where, post times, caption notes and status. Importing again updates dates and text and keeps your reels and progress.
+- Colors: green = reel, purple = ad or holiday Story, peach = Reddit. Each post shows its status, a yellow "to fill" tag while its script still has [brackets], and a warning if a Part 2 isn't the day after its Part 1.
+- Tap a post to edit its topic, hook, script (brackets highlighted), date, type and status. Drag a post to another day. ＋ adds a post to any day.
+- **Start this reel** makes a new reel with that day's hook, script and date, and opens Record. Status updates on its own: Recorded, Edited (after export), Posted (all five post cards ticked).
+- Every reel is kept. **Start a new reel** no longer clears anything; switch between reels under **My reels** (delete there too).
+- Recording warns you if the script still has [brackets].
+
 ## Coming next
 
-6. **Calendar:** month/week plan, import my content calendar.
+Nothing left on the build list. Next: whatever comes up from real reels.
 
 ## Files
 
@@ -85,6 +95,7 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - `js/export.js`: MP4 export and cover frames
 - `js/text.js`: hook, captions, list drawing and styles
 - `js/segment.js`: text behind me
+- `js/calendar.js`: calendar import (.xlsx/.csv), colors, checks
 - `js/post.js`: post cards, caption templates, post times
 - `js/fx.js`: mirror effects, transitions, graphics and stamps
 - `assets/healthquest-logo.png`: logo for the graphics tab
