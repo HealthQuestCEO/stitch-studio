@@ -1531,6 +1531,11 @@ function post() {
     </div>
     ${tester ? `<div class="note">Tester line is on until ${new Date(S.testerEnd + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. After that it drops off by itself.</div>` : ''}
     <label>Your caption</label>
+    <div class="row" style="margin:-2px 0 8px">
+      <button class="chip" id="capSaid" ${P.cleaned && P.transcript ? '' : 'disabled title="Needs the transcript from Clean"'}>✨ Fill from what I said</button>
+      <button class="chip" id="capScript" ${P.script.trim() ? '' : 'disabled title="No script on this reel"'}>📝 Fill from my script</button>
+      ${calNote() ? `<span class="hint" style="margin:0">Calendar note: ${esc(calNote())}</span>` : ''}
+    </div>
     <textarea id="pcap" placeholder="What happened, in your words. A short story, then why it matters. Hashtags and links get added for you.">${esc(P.caption)}</textarea>
     <div class="row">
       <label class="inline">Closer <select id="pcloser"><option value="-1">None</option>${closers.map((c, i) => `<option value="${i}" ${+P.closer === i ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
@@ -1571,6 +1576,14 @@ function post() {
   $('#back5').onclick = () => go(5);
   $('#pdate').onchange = (e) => { P.postDate = e.target.value; save(); render(); };
   let capTimer;
+  const fillCap = (txt) => {
+    if (!txt) return;
+    if (P.caption.trim() && !confirm('Replace the caption you already have?')) return;
+    P.caption = txt; save(); render();
+    if (/\[[^\]]+\]/.test(txt)) toast('Your caption still has [brackets]. Fill them in before you copy it.', 5000);
+  };
+  if ($('#capSaid')) $('#capSaid').onclick = () => fillCap(captionFromSpeech());
+  if ($('#capScript')) $('#capScript').onclick = () => fillCap(captionFromScript());
   $('#pcap').oninput = (e) => { P.caption = e.target.value; save(); clearTimeout(capTimer); capTimer = setTimeout(refreshCaps, 300); };
   $('#pcloser').onchange = (e) => { P.closer = +e.target.value; save(); render(); };
   $('#ptitle').oninput = (e) => { P.ytTitle = e.target.value; save(); };
@@ -1597,6 +1610,26 @@ function post() {
     await saveSettings(); render();
   }));
 }
+// Caption drafts from her own words: what she said (after Clean) or her script. No AI, no rewriting.
+const FILLER = /^(um+|uh+|erm|hmm+|like,?|you know,?)$/i;
+function sentences(txt) { return (txt.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+["')]*|[^.!?]+$/g) || []).map((x) => x.trim()).filter(Boolean); }
+function tidy(arr, max) {
+  const out = []; let n = 0;
+  for (const x of arr) { const w = x.split(' ').length; if (out.length && n + w > max) break; out.push(x[0].toUpperCase() + x.slice(1)); n += w; }
+  return out.join(' ');
+}
+function captionFromSpeech() {
+  const words = outWords(P.items, P.takes, fullRanges()).map((w) => w.text.trim()).filter((t) => t && !FILLER.test(t));
+  const txt = words.join(' ').replace(/\s+([,.!?])/g, '$1');
+  const s = sentences(txt);
+  return tidy(s, 70) + (s.length > 1 ? '' : '');
+}
+function captionFromScript() {
+  const lines = P.script.replace(/^ON SCREEN[^:]*:\s*/i, '').replace(/Part 2 next\.?|Part 2 tomorrow\.?/gi, '');
+  return tidy(sentences(lines), 70);
+}
+function calNote() { const ce = CAL.entries.find((x) => x.id === P.calId); return ce ? ce.notes : ''; }
+
 // Update the platform captions while typing without losing focus.
 function refreshCaps() {
   const caps = buildCaptions(S, { body: P.caption, closer: P.closer >= 0 ? S.closers[P.closer] : '', title: P.ytTitle || P.title, hook: P.hook, date: P.postDate });
