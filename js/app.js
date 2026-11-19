@@ -39,6 +39,7 @@ const blank = () => ({
   effects: [],          // mirror effects {id, kind, start, dur}
   trans: { def: 'cut', dur: 0.3, joins: {} },
   gfx: [],              // graphics and stamps
+  splits: [],           // reel times where you split the video into sections
   postDate: '', caption: '', closer: 0, ytTitle: '', posted: {}, capEdits: {}, status: 'To record',
   scrub: 0,
 });
@@ -47,7 +48,7 @@ let P = blank();
 const urls = {};        // take id -> object URL
 let undoStack = [], redoStack = [];
 
-const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text, broll: P.broll, effects: P.effects, trans: P.trans, gfx: P.gfx });
+const snap = () => JSON.stringify({ splits: P.splits, items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text, broll: P.broll, effects: P.effects, trans: P.trans, gfx: P.gfx });
 function remember() { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncUndo(); }
 function restore(s) { Object.assign(P, JSON.parse(s)); save(); render(); }
 $('#undo').onclick = () => { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); syncUndo(); };
@@ -560,6 +561,9 @@ async function makeOverlay(part) {
   const front = { hook: !behind.hook, caps: !behind.caps, list: !behind.list };
   const gl = new GfxLayer(P.gfx, (id) => urls[id], 'assets/healthquest-logo.png');
   await gl.load();
+  const LG = { ...defaultSettings().logo, ...(S.logo || {}) };
+  let logoImg = null;
+  if (LG.on && P.logoOn !== false) { logoImg = new Image(); logoImg.src = 'assets/healthquest-logo.png'; await logoImg.decode().catch(() => {}); }
   const mirrored = (ft) => P.effects.some((e) => ft >= e.start && ft < e.start + e.dur);
   const fn = (ctx, t, src, running = false) => {
     const ft = t + off;
@@ -574,6 +578,12 @@ async function makeOverlay(part) {
       drawText(ctx, T, t, undefined, part);
     }
     gl.draw(ctx, ft);
+    if (logoImg && logoImg.naturalWidth) { // the logo on every reel
+      const w = W * LG.size, h = (w * logoImg.naturalHeight) / logoImg.naturalWidth, m = W * 0.04;
+      const x = LG.corner.includes('l') ? m : W - w - m;
+      const y = LG.corner.includes('t') ? H * 0.07 : H - h - H * 0.12; // clear of the top bar and the caption area
+      ctx.save(); ctx.globalAlpha = LG.opacity; ctx.drawImage(logoImg, x, y, w, h); ctx.restore();
+    }
   };
   fn.prepare = (t) => br.prepare(t + off);
   fn.pause = () => br.pauseAll();
@@ -731,6 +741,7 @@ function transcriptHTML() {
     const why = it.reason && it.reason !== 'kept' ? ` (${it.reason})` : '';
     if (it.type === 'word') html += `<span class="w ${it.cut ? 'cut' : ''}" data-i="${i}" title="${it.cut ? 'Cut' + why + '. Tap to put back.' : 'Tap to cut'}">${esc(it.text)}</span> `;
     else if (it.type === 'gap') html += `<span class="gap ${it.cut ? 'cut' : ''}" data-i="${i}" title="${it.cut ? 'Pause cut. Tap to keep.' : 'Pause kept. Tap to cut.'}">⏸ ${fmt(it.end - it.start)}s</span>`;
+    else if (it.type === 'manual') html += `<span class="gap ${it.cut ? 'cut' : ''}" data-i="${i}" title="${it.cut ? 'Section you removed in Edit. Tap to put it back.' : 'Put back. Tap to remove again.'}">✂ removed ${fmt(it.end - it.start)}s</span>`;
     else html += `<span class="gap ${it.cut ? 'cut' : ''}" style="background:#e6f4f1;color:#0a6466" data-i="${i}" title="${it.cut ? 'Cut. Tap to keep.' : 'Talking. Tap to cut.'}">🗣 ${fmt(it.end - it.start)}s</span>`;
   });
   return html;
@@ -787,6 +798,7 @@ function edit() {
     <h1>Edit</h1>
     <div class="tabs">${[['text', 'Text'], ['broll', 'B-roll'], ['trans', 'Transitions & mirror'], ['gfx', 'Graphics & stamps']].map(([k, n]) =>
       `<button class="tab ${editTab === k ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
+    ${splitBarHTML(len)}
     ${editTab === 'broll' ? brollHTML(len) : editTab === 'trans' ? transHTML(len) : editTab === 'gfx' ? gfxHTML(len) : `
     <div class="scrub">
       <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
@@ -843,6 +855,7 @@ function edit() {
   $('#back3').onclick = () => go(3);
   $('#go5').onclick = () => go(5);
   document.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { editTab = b.dataset.tab; render(); }));
+  splitBind(len);
   if (editTab === 'broll') { brollBind(); return; }
   if (editTab === 'trans') { transBind(); return; }
   if (editTab === 'gfx') { gfxBind(); return; }
@@ -985,6 +998,115 @@ function brollBind() {
   }));
 }
 
+// ---------- Split: cut the reel into sections, then change one section ----------
+let secSel = -1, pendingDur = null;
+const sectionsOf = (len) => {
+  const cuts = [...new Set((P.splits || []).filter((t) => t > 0.05 && t < len - 0.05).map((t) => +t.toFixed(2)))].sort((a, b) => a - b);
+  const edges = [0, ...cuts, len];
+  return edges.slice(0, -1).map((a, i) => ({ a, b: edges[i + 1] }));
+};
+function splitBarHTML(len) {
+  const secs = sectionsOf(len);
+  if (secSel >= secs.length) secSel = -1;
+  const pct = (t) => (100 * t) / Math.max(len, 0.01);
+  const lane = (arr, cls, label) => arr.map((x) => `<div class="lane ${cls}" style="left:${pct(x.start)}%;width:${Math.max(0.6, pct(Math.min(x.dur, len - x.start)))}%" title="${label}"></div>`).join('');
+  const sel = secs[secSel];
+  return `<div class="splitbox">
+    <div class="row"><b>Sections</b>
+      <button class="chip on" id="splitHere">✂ Split at ${fmt(P.scrub)} sec</button>
+      <span class="hint" style="margin:0">Move the slider, split, then tap a section to change just that part.</span></div>
+    <div class="tl" id="tl">
+      <div class="secs">${secs.map((x, i) => `<button class="sec ${i === secSel ? 'on' : ''}" data-sec="${i}" style="flex:${x.b - x.a}">${i + 1}<small>${fmt(x.a)}–${fmt(x.b)}</small></button>`).join('')}</div>
+      <div class="lanes">${lane(P.broll, 'lb', 'B-roll')}${lane(P.effects, 'lm', 'Mirror')}${lane(P.gfx, 'lg', 'Graphic')}</div>
+      ${secs.slice(1).map((x) => `<button class="cutmark" data-unsplit="${x.a}" style="left:${pct(x.a)}%" title="Remove this split">✂</button>`).join('')}
+      <div class="playhead" style="left:${pct(P.scrub)}%"></div>
+    </div>
+    <div class="legend"><span class="dot" style="background:#e8a33d"></span>B-roll <span class="dot" style="background:#8a63d2"></span>Mirror <span class="dot" style="background:#0f8b8d"></span>Graphics · tap ✂ on a split line to remove it</div>
+    ${sel ? `<div class="secact">
+      <b>Section ${secSel + 1}: ${fmt(sel.a)}–${fmt(sel.b)} sec (${fmt(sel.b - sel.a)} sec)</b>
+      <div class="row">
+        <select id="secMirror"><option value="">🪞 Mirror this section…</option>${Object.entries(MIRRORS).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>
+        <label class="btn" style="margin:0;cursor:pointer">🖼 Cover with B-roll<input type="file" id="secBroll" accept="image/*,video/*" hidden></label>
+        <button class="btn" id="secLib">📚 B-roll from library</button>
+        <button class="btn" id="secPlay">▶ Play section</button>
+        <button class="btn danger" id="secDel">🗑 Remove section</button>
+      </div></div>` : ''}
+  </div>`;
+}
+function shiftAfter(a, b) {
+  const len = b - a;
+  for (const arr of [P.broll, P.effects, P.gfx]) {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const x = arr[i], end = x.start + x.dur;
+      if (x.start >= b) x.start = +(x.start - len).toFixed(2);
+      else if (end <= a) continue;
+      else if (x.start >= a && end <= b) arr.splice(i, 1);
+      else if (x.start < a) x.dur = +Math.max(0.2, (a - x.start) + Math.max(0, end - b)).toFixed(2);
+      else { x.dur = +Math.max(0.2, end - b).toFixed(2); x.start = a; }
+    }
+  }
+  P.splits = (P.splits || []).filter((t) => t <= a || t >= b).map((t) => (t >= b ? +(t - len).toFixed(2) : t));
+}
+function removeSection(a, b) {
+  const ranges = fullRanges();
+  if (!P.cleaned) { // turn every take into one kept item so cuts have something to subtract from
+    P.items = P.takes.map((t, i) => ({ type: 'speech', take: i, start: 0, end: t.duration, cut: false, reason: '' }));
+    P.cleaned = true;
+  }
+  let acc = 0;
+  for (const r of ranges) {
+    const s0 = acc, s1 = acc + (r.end - r.start); acc = s1;
+    const lo = Math.max(a, s0), hi = Math.min(b, s1);
+    if (hi - lo < 0.02) continue;
+    P.items.push({ type: 'manual', take: r.take, start: r.start + (lo - s0), end: r.start + (hi - s0), cut: true, reason: 'manual' });
+  }
+  P.items.sort((x, y) => x.take - y.take || x.start - y.start);
+  shiftAfter(a, b);
+}
+function splitBind(len) {
+  $('#splitHere').onclick = () => {
+    if (P.scrub < 0.1 || P.scrub > len - 0.1) { toast('Move the slider to the spot you want to split first.'); return; }
+    remember(); P.splits = [...(P.splits || []), +P.scrub.toFixed(2)];
+    const secs = sectionsOf(len); secSel = secs.findIndex((x) => x.a >= P.scrub - 0.01);
+    save(); render();
+  };
+  $('#tl').onclick = (e) => {
+    if (e.target.closest('[data-sec],[data-unsplit]')) return;
+    const r = $('#tl').getBoundingClientRect();
+    P.scrub = Math.max(0, Math.min(len - 0.05, ((e.clientX - r.left) / r.width) * len)); render();
+  };
+  document.querySelectorAll('[data-sec]').forEach((b) => (b.onclick = () => {
+    const i = +b.dataset.sec; secSel = secSel === i ? -1 : i;
+    if (secSel >= 0) P.scrub = Math.min(sectionsOf(len)[i].a + 0.05, len - 0.05);
+    render();
+  }));
+  document.querySelectorAll('[data-unsplit]').forEach((b) => (b.onclick = () => {
+    remember(); const t = +b.dataset.unsplit; P.splits = P.splits.filter((x) => Math.abs(x - t) > 0.011); secSel = -1; save(); render();
+  }));
+  const sel = sectionsOf(len)[secSel];
+  if (!sel) return;
+  $('#secMirror').onchange = (e) => {
+    if (!e.target.value) return;
+    remember(); P.effects.push({ id: newId('e'), kind: e.target.value, start: +sel.a.toFixed(2), dur: +(sel.b - sel.a).toFixed(2) });
+    save(); render(); toast('Mirrored this section. Change it under Transitions & mirror.');
+  };
+  $('#secBroll').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const id = newId('b'); await store.put('blob:' + id, f); urls[id] = URL.createObjectURL(f);
+    remember();
+    const it = newBroll(id, f.type.startsWith('image/') ? 'image' : 'video', f.name, sel.a);
+    it.dur = +(sel.b - sel.a).toFixed(2); it.layout = 'full'; it.anim = 'none';
+    P.broll.push(it); P.broll.sort((x, y) => x.start - y.start); moveWhat = 'b:' + id;
+    save(); render(); toast('B-roll covers this section. Change it under B-roll.');
+  };
+  $('#secLib').onclick = () => { pendingDur = +(sel.b - sel.a).toFixed(2); P.scrub = sel.a; editTab = 'broll'; libOpen = true; render(); toast('Tap a tile to cover the section.'); };
+  $('#secPlay').onclick = () => play(sel.a, sel.b - sel.a);
+  $('#secDel').onclick = () => {
+    if (!confirm(`Remove ${fmt(sel.b - sel.a)} sec (section ${secSel + 1})? You can put it back in Clean or with Undo.`)) return;
+    remember(); removeSection(sel.a, sel.b); secSel = -1; save(); render();
+  };
+}
+
 // ---------- shared bits for timed items ----------
 const newId = (p) => p + Date.now() + Math.random().toString(36).slice(2, 6);
 function scrubBlock(len, hint) {
@@ -1055,7 +1177,17 @@ function transBind() {
 const GANIM = { pop: 'Pop in', slam: 'Stamp slam', draw: 'Draw on', fade: 'Fade in', none: 'None' };
 const gIcon = { stampCheck: '✅', stampX: '❌', check: '✔', cross: '✖', arrow: '➜', circle: '◯', underline: '﹏', sparkle: '✨', star: '💥', emoji: '😀', logo: '🟢', png: '🖼' };
 function gfxHTML(len) {
+  const LG = { ...defaultSettings().logo, ...(S.logo || {}) };
   return `${scrubBlock(len, 'Move the slider to the moment, tap a graphic to add it there, then drag it on the preview.')}
+  <div class="card">
+    <div class="card-h"><label class="inline big-l" style="margin:0"><input type="checkbox" id="logoOn" ${LG.on ? 'checked' : ''}> HealthQuest logo on every reel</label><span class="sub">applies to all reels</span></div>
+    ${LG.on ? `<div class="row">
+      <label class="inline">Corner <select id="logoCorner">${[['tl', 'Top left'], ['tr', 'Top right'], ['bl', 'Bottom left'], ['br', 'Bottom right']].map(([k, n]) => `<option value="${k}" ${LG.corner === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="inline">Size <input type="range" id="logoSize" min="0.08" max="0.3" step="0.01" value="${LG.size}"></label>
+      <label class="inline">See-through <input type="range" id="logoOp" min="0.3" max="1" step="0.05" value="${LG.opacity}"></label>
+      <label class="inline"><input type="checkbox" id="logoHere" ${P.logoOn === false ? 'checked' : ''}> Hide it on this reel only</label></div>
+      <p class="hint">Top and bottom spots stay clear of Instagram's and TikTok's buttons and your captions. Check the preview.</p>` : ''}
+  </div>
   <div class="gpal">${Object.entries(GFX).filter(([k]) => k !== 'png').map(([k, n]) => `<button class="gbtn" data-gadd="${k}"><span>${gIcon[k]}</span>${n}</button>`).join('')}
     <label class="gbtn" style="cursor:pointer"><span>🖼</span>Upload PNG<input type="file" id="gpng" accept="image/png,image/*" hidden></label></div>
   <h3 style="margin-top:20px">In this reel (${P.gfx.length})</h3>
@@ -1078,6 +1210,14 @@ function gfxHTML(len) {
 }
 function gfxBind() {
   bindScrub(); bindInputs(); bindTimed();
+  const setLogo = async (k, v, re = true) => { S.logo = { ...defaultSettings().logo, ...(S.logo || {}), [k]: v }; await saveSettings(); re ? render() : repaint(); };
+  $('#logoOn').onchange = (e) => setLogo('on', e.target.checked);
+  if ($('#logoCorner')) {
+    $('#logoCorner').onchange = (e) => setLogo('corner', e.target.value);
+    $('#logoSize').oninput = (e) => setLogo('size', +e.target.value, false);
+    $('#logoOp').oninput = (e) => setLogo('opacity', +e.target.value, false);
+    $('#logoHere').onchange = (e) => { P.logoOn = e.target.checked ? false : true; save(); repaint(); };
+  }
   document.querySelectorAll('[data-gadd]').forEach((b) => (b.onclick = () => {
     remember();
     const g = newGfx(newId('g'), b.dataset.gadd, P.scrub, b.dataset.gadd === 'emoji' ? { text: '🔥' } : {});
@@ -1167,6 +1307,7 @@ function libraryBind() {
     await store.put('blob:' + id, await L.libBlob(it.id)); urls[id] = L.libUrl(it.id);
     remember();
     const item = newBroll(id, it.kind, it.name, P.scrub); item.lib = true;
+    if (pendingDur) { item.dur = pendingDur; item.layout = 'full'; item.anim = 'none'; pendingDur = null; }
     P.broll.push(item); P.broll.sort((a, c) => a.start - c.start); moveWhat = 'b:' + id;
     save(); render(); toast(`Added "${it.name}" at ${fmt(item.start)} sec.`);
   }));

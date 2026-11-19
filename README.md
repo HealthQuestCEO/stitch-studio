@@ -80,6 +80,17 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - Every reel is kept. **Start a new reel** no longer clears anything; switch between reels under **My reels** (delete there too).
 - Recording warns you if the script still has [brackets].
 
+## Split tool (Edit, above the tabs)
+
+- Move the slider and tap **✂ Split** to cut the reel into sections. Tap ✂ on a split line to remove it.
+- Tap a section to change just that part: **mirror it**, **cover it with B-roll** (upload or from the library, full screen for the whole section), **play it**, or **remove it**.
+- Removing a section shortens the reel; B-roll, mirror and graphics after it move up to stay in sync. It shows in Clean as "✂ removed", tap to put it back (or Undo).
+- Colored lanes under the sections show where B-roll, mirror and graphics are.
+
+## Logo on every reel
+
+- Edit → Graphics & stamps → **HealthQuest logo on every reel**. One switch for all reels: corner, size, see-through. "Hide it on this reel only" when one reel shouldn't have it.
+
 ## Coming next
 
 Nothing left on the build list. Next: whatever comes up from real reels.
