@@ -48,7 +48,7 @@ export async function makeVideos(urls) {
 }
 
 export async function renderReel(urls, ranges, onProgress = () => {}, opts = {}) {
-  const { track = null, offset = 0, overlay = null, comp = null } = opts;
+  const { track = null, offset = 0, overlay = null, comp = null, vols = [] } = opts;
   if (track) await track.load();
   const mime = pickMime();
   if (!mime) throw new Error('This browser cannot record video. Please use an up-to-date Chrome.');
@@ -61,7 +61,13 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
   const ac = new AudioContext();
   await ac.resume();
   const dest = ac.createMediaStreamDestination();
-  vids.forEach((v) => ac.createMediaElementSource(v).connect(dest));
+  // Each take has its own volume (1 = as recorded, up to 2 = louder).
+  vids.forEach((v, i) => { const g = ac.createGain(); g.gain.value = vols[i] ?? 1; ac.createMediaElementSource(v).connect(g).connect(dest); });
+  // B-roll clips whose sound you turned up
+  if (overlay && overlay.audioEls) for (const { el, vol } of overlay.audioEls()) {
+    el.muted = false; el.volume = 1;
+    const g = ac.createGain(); g.gain.value = vol; ac.createMediaElementSource(el).connect(g).connect(dest);
+  }
 
   const stream = new MediaStream([
     ...canvas.captureStream(30).getVideoTracks(),

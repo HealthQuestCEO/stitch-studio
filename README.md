@@ -80,12 +80,24 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - Every reel is kept. **Start a new reel** no longer clears anything; switch between reels under **My reels** (delete there too).
 - Recording warns you if the script still has [brackets].
 
-## Split tool (Edit, above the tabs)
+## Timeline (Edit, above the tabs)
 
-- Move the slider and tap **✂ Split** to cut the reel into sections. Tap ✂ on a split line to remove it.
-- Tap a section to change just that part: **mirror it**, **cover it with B-roll** (upload or from the library, full screen for the whole section), **play it**, or **remove it**.
-- Removing a section shortens the reel; B-roll, mirror and graphics after it move up to stay in sync. It shows in Clean as "✂ removed", tap to put it back (or Undo).
-- Colored lanes under the sections show where B-roll, mirror and graphics are.
+- **One line on top:** ▶ play from the slider, the time, the slider, and **✂ Split here**.
+- **Each take is its own clip** on the main line. Whatever Clean kept shows up per take. Tap a clip to:
+  - set its **volume** (0–200%; over 100% boosts a quiet take) or **Mute** it,
+  - move it **◀ Earlier / Later ▶**,
+  - **🗑 Remove** it (Undo brings it back). To trim, split at the spot and remove that section.
+- **＋ at the end of the main line** adds photos or videos. A photo becomes a clip with a slow push-in (3 sec to start; change "Shows for" up to 15 sec). Clean skips photos.
+- **Colors:** teal = video, gold = photo, mint = B-roll, purple = captions (plus thin lines for mirror and graphics).
+- **◆ between clips:** one tap cycles the transition (cut, crossfade, swipes, zoom, flash, whip) and plays it. Yellow means it's not a plain cut. Only shows with 2+ clips.
+- **B-roll lane:** tap a B-roll to set its sound. B-roll is muted (0%) unless you turn it up.
+- **Sections:** split lines show across the timeline. Tap a section to mirror it, cover it with B-roll, play it or remove it.
+
+## Typed captions (Edit → Text)
+
+- For reels with no talking, where the words do the work (reading, reactions, B-roll).
+- Type one line per caption card (*stars* = yellow), then pick **Spread across the whole reel**, **Spread across one clip**, or **Scroll up like a teleprompter**, and tap **Make caption cards**.
+- Cards show in the purple lane. Fix any card's timing under "Timing for each card". Style, animation and drag-to-move like the other text.
 
 ## Logo on every reel
 
