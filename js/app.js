@@ -735,6 +735,11 @@ async function paintSlide(ctx, i) {
   drawSlide(ctx, P.slides, imgs, t, P.aspect);
   ov(ctx, t, null);
 }
+let heicLib = null;
+function heicToJpeg(f) {
+  heicLib = heicLib || new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'; sc.onload = () => res(window.heic2any); sc.onerror = rej; document.head.appendChild(sc); });
+  return heicLib.then(async (h) => { const out = await h({ blob: f, toType: 'image/jpeg', quality: 0.92 }); const bl = Array.isArray(out) ? out[0] : out; return new File([bl], f.name.replace(/\.hei[cf]$/i, '') + '.jpg', { type: 'image/jpeg' }); });
+}
 function photoRecord() {
   panel.innerHTML = `
     <h1>Photos</h1>
@@ -751,13 +756,21 @@ function photoRecord() {
     <div class="next"><span></span><button class="big" id="goEdit" ${P.slides.length ? '' : 'disabled'}>Next: Edit →</button></div>`;
   $('#addSlides').onchange = async (e) => {
     let bad = 0;
-    for (const f of e.target.files) {
-      try { const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); } catch { bad++; continue; }
+    const files = [...e.target.files];
+    if (files.length) toast(`Adding ${files.length} photo${files.length > 1 ? 's' : ''}…`, 60000);
+    for (let f of files) {
+      let ok = false;
+      try { const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); ok = true; } catch {}
+      if (!ok && /hei[cf]/i.test(f.type + f.name)) { // iPhone photo: convert to JPEG
+        try { f = await heicToJpeg(f); const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); ok = true; } catch (err) { console.warn('HEIC convert failed', err); }
+      }
+      if (!ok) { bad++; continue; }
       const id = 's' + Date.now() + Math.random().toString(36).slice(2, 6);
       await store.put('blob:' + id, f); urls[id] = URL.createObjectURL(f);
       remember(); P.slides.push({ id, name: f.name, text: '' });
     }
-    if (bad) toast(`${bad} photo${bad > 1 ? 's' : ''} wouldn't open (iPhone HEIC photos often don't in Chrome). On your iPhone: Settings → Camera → Formats → Most Compatible, or export them from Photos as JPEG.`, 9000);
+    if (bad) toast(`${bad} photo${bad > 1 ? 's' : ''} wouldn't open. Try saving ${bad > 1 ? 'them' : 'it'} as JPEG first (on iPhone: Share → Save to Files, or Settings → Camera → Formats → Most Compatible).`, 9000);
+    else if (files.length) toast('Added.');
     if (P.status === 'To record' && P.slides.length) P.status = 'Recorded';
     save(); render();
   };
