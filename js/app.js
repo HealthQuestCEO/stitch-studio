@@ -1,5 +1,5 @@
 import * as store from './store.js';
-import { decodeClip, to16kMono, speechRuns } from './audio.js';
+import { decodeClip, to16kMono, speechRuns, captureAudio } from './audio.js';
 import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit, outWords } from './clean.js';
 import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
 import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
@@ -220,7 +220,7 @@ function plan() {
     const r = reelIndex[b.dataset.delreel];
     if (!confirm(`Delete "${r.title}" and its recordings? This can't be undone.`)) return;
     const old = await store.get('reel:' + r.id);
-    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || [])]) await store.del('blob:' + t.id);
+    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || [])]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
     await store.del('reel:' + r.id); delete reelIndex[r.id]; await store.put('reelIndex', reelIndex);
     const ce = CAL.entries.find((x) => x.reelId === r.id); if (ce) { ce.reelId = null; await saveCal(); }
     render();
@@ -347,7 +347,7 @@ function record() {
     <div class="row">
       <button class="big" id="camBtn">${cam ? '● Start recording' : VO() ? 'Turn on mic' : 'Turn on camera'}</button>
       <label class="btn" style="margin:22px 0 0">⬆ Upload ${VO() ? 'voice (audio or video)' : 'from phone'}
-        <input type="file" id="upload" accept="${VO() ? 'audio/*,video/*' : 'video/*'}" multiple hidden></label>
+        <input type="file" id="upload" accept="${VO() ? 'audio/*,video/*,.mov,.m4a' : 'video/*,.mov,.MOV,.mp4'}" multiple hidden></label>
     </div>
     <details class="more"><summary>More options</summary>
       <label><input type="checkbox" id="pOn" ${P.prompter ? 'checked' : ''}> Scroll my script while I record</label>
@@ -359,7 +359,7 @@ function record() {
       <button class="btn" data-play="${i}">▶</button><button class="x" data-del="${i}" title="Remove this take">✕</button></li>`).join('') || '<li>No takes yet.</li>'}</ul>
     ${VO() ? `<h3 style="margin-top:26px">What plays on screen (${P.visuals.length}) ${tip('Photos, clips or screen recordings. They play in this order. Leave seconds blank to share the time evenly.')}</h3>
       <label class="btn" style="display:inline-block;margin:0">＋ Add photos, clips or screen recordings
-        <input type="file" id="addVis" accept="image/*,video/*" multiple hidden></label>
+        <input type="file" id="addVis" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
       <ul class="takes vis">${P.visuals.map((v, i) => `<li>${v.kind === 'image' ? `<img src="${urls[v.id]}">` : `<video src="${urls[v.id]}#t=0.5" muted></video>`}
         <b>${esc(v.name)}</b>
         <input type="number" min="0.5" step="0.5" placeholder="auto" value="${v.sec || ''}" data-sec="${i}" title="Seconds on screen (blank = auto)"> sec
@@ -458,14 +458,27 @@ function startPrompter() {
 function stopPrompter() { cancelAnimationFrame(scrollRAF); $('#prompter').classList.add('hidden'); }
 
 async function addTake(blob, name) {
-  let duration = 0;
-  try { duration = (await decodeClip(blob)).duration; }
-  catch { toast(`Couldn't read the sound in ${name}. Try exporting it from your phone as MP4.`); return; }
+  let duration = 0, audioId = null;
   const id = 't' + Date.now() + Math.random().toString(36).slice(2, 6);
+  try { if (window.__FORCE_CAPTURE) throw new Error('test'); duration = (await decodeClip(blob)).duration; }
+  catch {
+    // Plan B for phone videos Chrome can't read directly: play it once and record the sound.
+    try {
+      toast(`Getting the sound out of ${name}. This plays it once (silently), so it takes as long as the clip…`, 600000);
+      const { audio, duration: d } = await captureAudio(blob, (p) => { $('#toast').textContent = `Getting the sound out of ${name}… ${Math.round(p * 100)}%`; });
+      await decodeClip(audio);
+      audioId = id + 'a'; duration = d;
+      await store.put('blob:' + audioId, audio);
+      toast(`Got it. ${name} is ready.`);
+    } catch (err) {
+      toast(`Chrome can't open ${name} (${err.message}). On your Mac: open it in QuickTime, choose File → Export As → 1080p, and upload that copy. Or set your iPhone to Settings → Camera → Formats → Most Compatible.`, 15000);
+      return;
+    }
+  }
   await store.put('blob:' + id, blob);
   urls[id] = URL.createObjectURL(blob);
   remember();
-  P.takes.push({ id, name, duration });
+  P.takes.push(audioId ? { id, name, duration, audioId } : { id, name, duration });
   if (P.status === 'To record') P.status = 'Recorded';
   P.cleaned = false; P.items = []; P.split = null;
   save();
@@ -661,7 +674,7 @@ async function runClean() {
   for (let i = 0; i < P.takes.length; i++) {
     const tk = P.takes[i];
     setStatus(`Take ${i + 1} of ${P.takes.length}: finding pauses…`, i / P.takes.length);
-    const blob = await store.get('blob:' + tk.id);
+    const blob = await store.get('blob:' + (tk.audioId || tk.id));
     const samples = await to16kMono(await decodeClip(blob));
     const runs = speechRuns(samples);
     setStatus(`Take ${i + 1} of ${P.takes.length}: getting the transcript…`);
@@ -926,7 +939,7 @@ function brollHTML(len) {
       <p class="hint">Move the slider to where a photo or clip should start, then add it. Your voice keeps playing; clip sound is muted.</p>
     </div>
     <label class="big gold" style="display:inline-block;cursor:pointer">＋ Add photo or clip at ${fmt(P.scrub)} sec
-      <input type="file" id="addBroll" accept="image/*,video/*" multiple hidden></label>
+      <input type="file" id="addBroll" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
     ${libraryHTML()}
     <h3 style="margin-top:22px">In this reel (${P.broll.length})</h3>
     ${P.broll.map((x, i) => `
@@ -1026,7 +1039,7 @@ function splitBarHTML(len) {
       <b>Section ${secSel + 1}: ${fmt(sel.a)}–${fmt(sel.b)} sec (${fmt(sel.b - sel.a)} sec)</b>
       <div class="row">
         <select id="secMirror"><option value="">🪞 Mirror this section…</option>${Object.entries(MIRRORS).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>
-        <label class="btn" style="margin:0;cursor:pointer">🖼 Cover with B-roll<input type="file" id="secBroll" accept="image/*,video/*" hidden></label>
+        <label class="btn" style="margin:0;cursor:pointer">🖼 Cover with B-roll<input type="file" id="secBroll" accept="image/*,video/*,.mov,.MOV,.heic" hidden></label>
         <button class="btn" id="secLib">📚 B-roll from library</button>
         <button class="btn" id="secPlay">▶ Play section</button>
         <button class="btn danger" id="secDel">🗑 Remove section</button>
@@ -1255,7 +1268,7 @@ function libraryHTML() {
   <details class="card lib" id="libBox" ${libOpen ? 'open' : ''}>
     <summary><b>📚 B-roll library</b> <span class="sub">${lib.items.length} saved · kept for every reel</span></summary>
     <div class="row" style="margin-top:10px">
-      <label class="btn" style="margin:0;cursor:pointer">⬆ Add to library<input type="file" id="libUp" accept="image/*,video/*" multiple hidden></label>
+      <label class="btn" style="margin:0;cursor:pointer">⬆ Add to library<input type="file" id="libUp" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
       <label class="inline" style="margin-top:0">into <select id="libUpCat">${lib.cats.map((c) => `<option ${c === upCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">＋ New category…</option></select></label>
       <input type="text" id="libSearch" class="short" placeholder="Search by name" value="${esc(libSearch)}">
     </div>
