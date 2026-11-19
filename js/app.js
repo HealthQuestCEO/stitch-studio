@@ -6,6 +6,7 @@ import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont,
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
 import * as L from './library.js';
+import { STATUSES, typeClass, isReel, bracketCount, readXlsx, parseCsv, rowsToEntries, mergeImport, partWarnings } from './calendar.js';
 import { PLATFORMS, RULES, defaultSettings, fmtTime, timesFor, buildCaptions, nextReelDay } from './post.js';
 import { Compositor, MIRRORS, TRANSITIONS, GFX, GfxLayer, newGfx, joinKey } from './fx.js';
 import { VisualTrack } from './visuals.js';
@@ -24,6 +25,7 @@ const STEPS = [
 
 // ---------- state ----------
 const blank = () => ({
+  id: 'r' + Date.now() + Math.random().toString(36).slice(2, 6), calId: null,
   title: '', hook: '', script: '',
   takes: [],            // {id, name, duration}
   items: [],            // clean results
@@ -61,7 +63,15 @@ function save() {
   $('#saved').textContent = 'Saving…';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
-    try { await store.put('project', P); $('#saved').textContent = 'Saved'; }
+    try {
+      await store.put('reel:' + P.id, P);
+      await store.put('currentReel', P.id);
+      reelIndex[P.id] = { id: P.id, title: P.title || P.hook || 'Untitled reel', postDate: P.postDate, status: P.status, calId: P.calId, updated: Date.now() };
+      await store.put('reelIndex', reelIndex);
+      const ce = CAL.entries.find((e) => e.id === P.calId);
+      if (ce && STATUSES.indexOf(P.status) > STATUSES.indexOf(ce.status)) { ce.status = P.status; await saveCal(); }
+      $('#saved').textContent = 'Saved';
+    }
     catch { $('#saved').textContent = 'Not saved'; }
   }, 400);
 }
@@ -98,10 +108,90 @@ function render() {
 }
 
 // ---------- Step 1: Plan ----------
+let CAL = { entries: [] }, reelIndex = {};
+let calView = 'month', calCursor = new Date().toISOString().slice(0, 10), calSel = null;
+async function saveCal() { await store.put('calendar', CAL); }
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const parseD = (s) => new Date(s + 'T12:00:00');
+const hlBrackets = (t) => esc(t).replace(/\[[^\]]+\]/g, (m) => `<mark>${m}</mark>`);
+
+function calendarHTML() {
+  const cur = parseD(calCursor);
+  let days = [];
+  if (calView === 'month') {
+    const first = new Date(cur.getFullYear(), cur.getMonth(), 1, 12);
+    const start = new Date(first); start.setDate(1 - first.getDay());
+    for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
+    if (days.slice(35).every((d) => d.getMonth() !== cur.getMonth())) days = days.slice(0, 35);
+  } else {
+    const start = new Date(cur); start.setDate(cur.getDate() - cur.getDay());
+    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
+  }
+  const warn = partWarnings(CAL.entries);
+  const today = iso(new Date());
+  const label = calView === 'month' ? cur.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : `Week of ${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  return `
+  <div class="calbar">
+    <button class="btn" id="calPrev">‹</button><b class="callabel">${label}</b><button class="btn" id="calNext">›</button>
+    <button class="chip" id="calToday">Today</button>
+    <span style="flex:1"></span>
+    <button class="chip ${calView === 'month' ? 'on' : ''}" data-view="month">Month</button><button class="chip ${calView === 'week' ? 'on' : ''}" data-view="week">Week</button>
+    <label class="btn" style="margin:0;cursor:pointer">⬆ Import calendar<input type="file" id="calImport" accept=".xlsx,.csv" hidden></label>
+  </div>
+  <div class="legend"><span class="dot reel"></span>Reel <span class="dot ad"></span>Ad or holiday Story <span class="dot reddit"></span>Reddit <span class="fill">3 to fill</span> = [brackets] left</div>
+  <div class="cal ${calView}">
+    ${DAYS.map((d) => `<div class="dow">${d}</div>`).join('')}
+    ${days.map((d) => {
+      const ds = iso(d), es = CAL.entries.filter((e) => e.date === ds);
+      const out = calView === 'month' && d.getMonth() !== cur.getMonth();
+      return `<div class="day ${out ? 'out' : ''} ${ds === today ? 'today' : ''}" data-day="${ds}">
+        <div class="dnum">${d.getDate()}<button class="plus" data-addday="${ds}" title="Add a post">＋</button></div>
+        ${es.map((e) => { const n = bracketCount(e.hook + ' ' + e.script); return `<div class="ev ${typeClass(e.type)} ${calSel === e.id ? 'sel' : ''}" draggable="true" data-ev="${e.id}" title="${esc(e.type)}: ${esc(e.topic)}">
+          <span class="evt">${esc(e.topic || e.type)}</span>
+          ${calView === 'week' && e.hook ? `<span class="evh">${esc(e.hook)}</span>` : ''}
+          <span class="evs"><i class="st st-${e.status.replace(/\s/g, '')}">${e.status}</i>${n ? `<i class="fill">${n} to fill</i>` : ''}${warn[e.id] ? '<i class="warnp" title="' + esc(warn[e.id]) + '">⚠ Part 2</i>' : ''}</span></div>`; }).join('')}
+      </div>`;
+    }).join('')}
+  </div>
+  ${calSel ? entryHTML(CAL.entries.find((e) => e.id === calSel), warn) : CAL.entries.length ? '<p class="hint">Tap a post to see its hook and script, fill in your answers, or start the reel. Drag a post to move it to another day.</p>' : '<div class="note">Import your content calendar (.xlsx or .csv) to fill this in, or tap ＋ on a day to add a post.</div>'}`;
+}
+
+function entryHTML(e, warn) {
+  if (!e) return '';
+  const reel = e.reelId && reelIndex[e.reelId];
+  return `<div class="card entry ${typeClass(e.type)}">
+    <div class="card-h"><b class="big-l">${parseD(e.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</b>
+      <span><select data-ef="status">${STATUSES.map((s) => `<option ${e.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      <button class="x" id="evDel" title="Delete this post">🗑</button><button class="x" id="evClose" title="Close">✕</button></span></div>
+    ${warn[e.id] ? `<div class="note bad">⚠ ${esc(warn[e.id])}</div>` : ''}
+    <div class="row"><label class="inline">Type <input type="text" class="short" data-ef="type" value="${esc(e.type)}"></label>
+      <label class="inline">Date <input type="date" data-ef="date" value="${e.date}"></label></div>
+    <label>Topic</label><input type="text" data-ef="topic" value="${esc(e.topic)}">
+    <label>Hook</label><input type="text" data-ef="hook" value="${esc(e.hook)}">
+    <label>Script ${bracketCount(e.script) ? `<span class="fill">${bracketCount(e.script)} to fill</span>` : ''}</label>
+    ${bracketCount(e.script) ? `<div class="scriptview">${hlBrackets(e.script)}</div><p class="hint">Replace each yellow [bracket] with your real answer below.</p>` : ''}
+    <textarea data-ef="script">${esc(e.script)}</textarea>
+    ${e.where || e.times ? `<p class="hint"><b>Where:</b> ${esc(e.where)}${e.times ? ` · <b>Times:</b> ${esc(e.times)}` : ''}</p>` : ''}
+    ${e.notes ? `<p class="hint"><b>Notes:</b> ${esc(e.notes)}</p>` : ''}
+    ${isReel(e) ? `<div class="row">${reel ? `<button class="big" id="evOpen">Open this reel →</button><span class="sub">${esc(reel.status)}</span>` : `<button class="big" id="evStart">Start this reel →</button>`}</div>` : ''}
+  </div>`;
+}
+
+function reelsHTML() {
+  const list = Object.values(reelIndex).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  return `<details class="more"><summary>My reels (${list.length})</summary>
+    ${list.map((r) => `<div class="row reelrow ${r.id === P.id ? 'cur' : ''}"><b>${esc(r.title)}</b><span class="sub">${r.postDate || ''} · ${r.status || ''}</span>
+      ${r.id === P.id ? '<span class="chip on">Open now</span>' : `<button class="chip" data-open="${r.id}">Open</button><button class="x" data-delreel="${r.id}" title="Delete reel">✕</button>`}</div>`).join('')}
+  </details>`;
+}
+
 function plan() {
   panel.innerHTML = `
-    <h1>Plan this reel</h1>
-    <p class="sub">Type your hook and script, or skip ahead. Your calendar comes in a later update.</p>
+    <h1>Plan</h1>
+    ${calendarHTML()}
+    <h2 style="margin-top:28px">This reel${P.calId ? ' <span class="sub">(from your calendar)</span>' : ''}</h2>
     <label>How will this reel look?</label>
     <div class="modes">
       <button class="mode ${!VO() ? 'on' : ''}" data-mode="camera"><b>🎥 Me on camera</b><span>You talk to the camera.</span></button>
@@ -111,18 +201,139 @@ function plan() {
     <input type="text" id="title" placeholder="e.g. The moment at NASPGHAN" value="${esc(P.title)}">
     <label>Hook (first 1–2 seconds)</label>
     <input type="text" id="hook" placeholder="e.g. I noticed one pattern I couldn't unsee" value="${esc(P.hook)}">
-    <label>Script ${tip('This scrolls on screen while you record, if you want it to.')}</label>
+    <label>Script ${tip('This scrolls on screen while you record, if you want it to.')} ${bracketCount(P.script) ? `<span class="fill">${bracketCount(P.script)} to fill</span>` : ''}</label>
     <textarea id="script" placeholder="Paste your script here">${esc(P.script)}</textarea>
+    ${reelsHTML()}
     <div class="next"><button class="btn" id="newReel">Start a new reel</button>
       <button class="big" id="go2">Next: Record →</button></div>`;
-  ['title', 'hook', 'script'].forEach((k) => ($('#' + k).oninput = (e) => { P[k] = e.target.value; save(); }));
+  ['title', 'hook', 'script'].forEach((k) => ($('#' + k).oninput = (e) => {
+    P[k] = e.target.value; save();
+    const ce = CAL.entries.find((x) => x.id === P.calId);
+    if (ce && k !== 'title') { ce[k] = P[k]; saveCal(); }
+  }));
   $('#go2').onclick = () => go(2);
   document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { remember(); P.mode = b.dataset.mode; save(); render(); }));
-  $('#newReel').onclick = async () => {
-    if (!confirm('Start a new reel? This clears the takes and cleanup for the current one.')) return;
-    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx]) await store.del('blob:' + t.id);
-    P = blank(); undoStack = []; redoStack = []; syncUndo(); save(); render();
+  $('#newReel').onclick = () => newReel();
+  document.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openReel(b.dataset.open)));
+  document.querySelectorAll('[data-delreel]').forEach((b) => (b.onclick = async () => {
+    const r = reelIndex[b.dataset.delreel];
+    if (!confirm(`Delete "${r.title}" and its recordings? This can't be undone.`)) return;
+    const old = await store.get('reel:' + r.id);
+    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || [])]) await store.del('blob:' + t.id);
+    await store.del('reel:' + r.id); delete reelIndex[r.id]; await store.put('reelIndex', reelIndex);
+    const ce = CAL.entries.find((x) => x.reelId === r.id); if (ce) { ce.reelId = null; await saveCal(); }
+    render();
+  }));
+  calendarBind();
+}
+
+function calendarBind() {
+  const move = (n) => { const d = parseD(calCursor); calView === 'month' ? d.setMonth(d.getMonth() + n) : d.setDate(d.getDate() + 7 * n); calCursor = iso(d); render(); };
+  $('#calPrev').onclick = () => move(-1);
+  $('#calNext').onclick = () => move(1);
+  $('#calToday').onclick = () => { calCursor = iso(new Date()); render(); };
+  document.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => { calView = b.dataset.view; render(); }));
+  $('#calImport').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const rows = /\.csv$/i.test(f.name) ? parseCsv(await f.text()) : await readXlsx(f);
+      const incoming = rowsToEntries(rows);
+      if (!incoming.length) { toast('No dated rows found in that file.'); return; }
+      const had = CAL.entries.length;
+      CAL.entries = mergeImport(CAL.entries, incoming);
+      await saveCal();
+      for (const ce of CAL.entries.filter((x) => x.reelId)) { // keep linked reels on the same date
+        if (ce.reelId === P.id) { P.postDate = ce.date; save(); continue; }
+        const r = await store.get('reel:' + ce.reelId);
+        if (r && r.postDate !== ce.date) { r.postDate = ce.date; await store.put('reel:' + r.id, r); }
+      }
+      calCursor = incoming[0].date; calView = 'month';
+      toast(had ? `Updated ${incoming.length} posts from your calendar. Your reels and progress were kept.` : `Imported ${incoming.length} posts.`);
+      render();
+    } catch (err) { toast('Couldn\'t read that file: ' + err.message, 6000); }
   };
+  document.querySelectorAll('[data-ev]').forEach((el) => {
+    el.onclick = (ev) => { ev.stopPropagation(); calSel = calSel === el.dataset.ev ? null : el.dataset.ev; render(); };
+    el.ondragstart = (ev) => ev.dataTransfer.setData('text/plain', el.dataset.ev);
+  });
+  document.querySelectorAll('[data-day]').forEach((d) => {
+    d.ondragover = (ev) => { ev.preventDefault(); d.classList.add('over'); };
+    d.ondragleave = () => d.classList.remove('over');
+    d.ondrop = async (ev) => {
+      ev.preventDefault(); d.classList.remove('over');
+      const e = CAL.entries.find((x) => x.id === ev.dataTransfer.getData('text/plain'));
+      if (!e || e.date === d.dataset.day) return;
+      e.date = d.dataset.day; await saveCal();
+      const w = partWarnings(CAL.entries);
+      if (w[e.id]) toast('⚠ ' + w[e.id], 6000);
+      if (e.reelId) { const r = await store.get('reel:' + e.reelId); if (r) { r.postDate = e.date; await store.put('reel:' + r.id, r); if (r.id === P.id) P.postDate = e.date; } }
+      render();
+    };
+  });
+  document.querySelectorAll('[data-addday]').forEach((b) => (b.onclick = async (ev) => {
+    ev.stopPropagation();
+    const e = { id: 'c' + Math.random().toString(36).slice(2, 9), date: b.dataset.addday, type: 'Story reel', topic: '', hook: '', script: '', where: '', times: '', notes: '', status: 'To record', reelId: null, manual: true };
+    CAL.entries.push(e); CAL.entries.sort((a, c) => a.date.localeCompare(c.date)); calSel = e.id; await saveCal(); render();
+  }));
+  const sel = CAL.entries.find((x) => x.id === calSel);
+  if (!sel) return;
+  document.querySelectorAll('[data-ef]').forEach((el) => {
+    const k = el.dataset.ef;
+    const set = async () => {
+      sel[k] = el.value; await saveCal();
+      if (sel.reelId === P.id && ['hook', 'script'].includes(k)) { P[k] = el.value; save(); }
+      else if (sel.reelId && ['hook', 'script', 'date'].includes(k)) { const r = await store.get('reel:' + sel.reelId); if (r) { r[k === 'date' ? 'postDate' : k] = el.value; await store.put('reel:' + r.id, r); } }
+    };
+    el.oninput = set;
+    el.onchange = async () => { await set(); if (['status', 'date', 'type', 'topic', 'script'].includes(k)) render(); };
+  });
+  $('#evClose').onclick = () => { calSel = null; render(); };
+  $('#evDel').onclick = async () => { if (!confirm('Delete this post from the calendar? Its reel (if any) is kept.')) return; CAL.entries = CAL.entries.filter((x) => x.id !== sel.id); calSel = null; await saveCal(); render(); };
+  if ($('#evStart')) $('#evStart').onclick = async () => {
+    await newReel({ title: sel.topic, hook: sel.hook, script: sel.script, postDate: sel.date, calId: sel.id }, true);
+    sel.reelId = P.id; await saveCal(); go(2);
+  };
+  if ($('#evOpen')) $('#evOpen').onclick = () => openReel(sel.reelId, 2);
+}
+
+// ---------- reels ----------
+function hydrate(saved) {
+  const p = Object.assign(blank(), saved);
+  const d = defaultText(), t = saved.text || {};
+  p.text = { hook: { ...d.hook, ...t.hook, style: { ...d.hook.style, ...(t.hook || {}).style } },
+    caps: { ...d.caps, ...t.caps, style: { ...d.caps.style, ...(t.caps || {}).style } },
+    list: { ...d.list, ...t.list, style: { ...d.list.style, ...(t.list || {}).style } } };
+  p.trans = { def: 'cut', dur: 0.3, joins: {}, ...p.trans };
+  return p;
+}
+async function loadUrls() {
+  for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx.filter((x) => x.type === 'png')]) {
+    if (urls[t.id]) continue;
+    const b = await store.get('blob:' + t.id);
+    if (b) urls[t.id] = URL.createObjectURL(b);
+  }
+  P.takes = P.takes.filter((t) => urls[t.id]);
+  P.visuals = P.visuals.filter((v) => urls[v.id]);
+  P.broll = P.broll.filter((b) => urls[b.id]);
+}
+async function flushSave() { clearTimeout(saveTimer); await store.put('reel:' + P.id, P); }
+async function openReel(id, step) {
+  stopCamera(); stopPlaying();
+  await flushSave();
+  const saved = await store.get('reel:' + id); if (!saved) return;
+  P = hydrate(saved); await loadUrls();
+  undoStack = []; redoStack = []; syncUndo();
+  previewTrack = null; preview.removeAttribute('src');
+  if (step) P.step = step;
+  save(); render();
+}
+async function newReel(fields = {}, quiet = false) {
+  stopCamera(); stopPlaying();
+  if (P.takes.length || P.title || P.script) await flushSave();
+  P = Object.assign(blank(), fields);
+  P.text.hook.text = '';
+  undoStack = []; redoStack = []; syncUndo(); previewTrack = null; preview.removeAttribute('src');
+  save(); if (!quiet) { P.step = 1; render(); toast('New reel started. Your other reels are under "My reels".'); }
 }
 
 // ---------- Step 2: Record ----------
@@ -208,6 +419,8 @@ function stopCamera() {
   stopPrompter();
 }
 function startRecording() {
+  const left = bracketCount(P.hook + ' ' + P.script);
+  if (P.prompter && left && !confirm(`Your script still has ${left} [bracket${left > 1 ? 's' : ''}] to fill in. Record anyway?`)) return;
   const mime = VO() ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported(m)) : pickMime();
   recorder = new MediaRecorder(cam, mime ? (VO() ? { mimeType: mime } : { mimeType: mime, videoBitsPerSecond: 12_000_000 }) : undefined);
   recChunks = [];
@@ -252,6 +465,7 @@ async function addTake(blob, name) {
   urls[id] = URL.createObjectURL(blob);
   remember();
   P.takes.push({ id, name, duration });
+  if (P.status === 'To record') P.status = 'Recorded';
   P.cleaned = false; P.items = []; P.split = null;
   save();
 }
@@ -1193,41 +1407,22 @@ function refreshCaps() {
 // ---------- start ----------
 (async function init() {
   try {
-    const saved = await store.get('project');
-    if (saved) {
-      P = Object.assign(blank(), saved);
-      const d = defaultText(), t = saved.text || {};
-      P.text = { hook: { ...d.hook, ...t.hook, style: { ...d.hook.style, ...(t.hook || {}).style } },
-        caps: { ...d.caps, ...t.caps, style: { ...d.caps.style, ...(t.caps || {}).style } },
-        list: { ...d.list, ...t.list, style: { ...d.list.style, ...(t.list || {}).style } } };
+    reelIndex = (await store.get('reelIndex')) || {};
+    CAL = (await store.get('calendar')) || { entries: [] };
+    let cur = await store.get('currentReel');
+    let saved = cur ? await store.get('reel:' + cur) : null;
+    if (!saved) {
+      const old = await store.get('project'); // from before reels had ids
+      if (old) { saved = old; if (!saved.id) saved.id = 'r' + Date.now(); await store.del('project'); }
     }
-    for (const t of P.takes) {
-      const b = await store.get('blob:' + t.id);
-      if (b) urls[t.id] = URL.createObjectURL(b);
-    }
-    P.takes = P.takes.filter((t) => urls[t.id]);
-    for (const v of P.visuals) {
-      const b = await store.get('blob:' + v.id);
-      if (b) urls[v.id] = URL.createObjectURL(b);
-    }
-    P.visuals = P.visuals.filter((v) => urls[v.id]);
-    for (const b of P.broll) {
-      if (urls[b.id]) continue;
-      const bl = await store.get('blob:' + b.id);
-      if (bl) urls[b.id] = URL.createObjectURL(bl);
-    }
-    P.broll = P.broll.filter((b) => urls[b.id]);
-    for (const g of P.gfx.filter((x) => x.type === 'png')) {
-      if (urls[g.id]) continue;
-      const bl = await store.get('blob:' + g.id);
-      if (bl) urls[g.id] = URL.createObjectURL(bl);
-    }
-    P.trans = { def: 'cut', dur: 0.3, joins: {}, ...P.trans };
+    if (saved) P = hydrate(saved);
+    await loadUrls();
     presets = (await store.get('presets')) || [];
     await L.loadLibrary();
     const st = await store.get('settings');
     if (st) S = { ...defaultSettings(), ...st, times: { ...defaultSettings().times, ...(st.times || {}) } };
+    if (P.postDate) calCursor = P.postDate;
   } catch (e) { console.warn(e); }
   if (P.step === 2) P.step = P.takes.length ? 3 : 2;
-  syncUndo(); render();
+  syncUndo(); render(); save();
 })();
