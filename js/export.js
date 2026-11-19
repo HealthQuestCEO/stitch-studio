@@ -61,8 +61,8 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
   const ac = new AudioContext();
   await ac.resume();
   const dest = ac.createMediaStreamDestination();
-  // Each take has its own volume (1 = as recorded, up to 2 = louder).
-  vids.forEach((v, i) => { const g = ac.createGain(); g.gain.value = vols[i] ?? 1; ac.createMediaElementSource(v).connect(g).connect(dest); });
+  // Volume per take/clip (1 = as recorded, up to 2 = louder).
+  const gains = vids.map((v, i) => { const g = ac.createGain(); g.gain.value = vols[i] ?? 1; ac.createMediaElementSource(v).connect(g).connect(dest); return g; });
   // B-roll clips whose sound you turned up
   if (overlay && overlay.audioEls) for (const { el, vol } of overlay.audioEls()) {
     el.muted = false; el.volume = 1;
@@ -83,6 +83,7 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
 
   for (const [k, r] of ranges.entries()) {
     const v = vids[r.take];
+    gains[r.take].gain.value = r.vol ?? vols[r.take] ?? 1; // each clip can have its own volume
     await seek(v, r.start);
     if (overlay && overlay.prepare) await overlay.prepare(done);
     const paint = (running) => {
