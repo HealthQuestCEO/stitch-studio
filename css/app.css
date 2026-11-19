@@ -154,3 +154,16 @@ select{border:1px solid var(--line);border-radius:8px;padding:6px;font:inherit}
 .gbtn{display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 6px;font-weight:600;font-size:13px}
 .gbtn span{font-size:24px}
 .gbtn:hover{border-color:var(--teal);background:#effaf7}
+
+/* post */
+.postbar{margin:18px 0 8px;font-size:15px}
+.pgrid{display:grid;grid-template-columns:1fr;gap:14px}
+.pcard{border:1px solid var(--line);border-radius:16px;padding:14px 16px;background:#fff}
+.pcard.done{background:#ecf8f3;border-color:#bfe8d9}
+.ptime{font-weight:800;color:var(--teal)}
+.rules{margin:6px 0 8px;padding-left:18px;color:var(--muted);font-size:13px}
+.ptext{min-height:150px;font-size:14px}
+.pcopy{font-size:15px;padding:10px 18px;margin-top:8px}
+.yttitle{font-size:14px;margin-bottom:8px}
+.ttable td,.ttable th{padding:4px 8px;text-align:left;font-size:13px}
+.ttable input{border:1px solid var(--line);border-radius:8px;padding:4px}

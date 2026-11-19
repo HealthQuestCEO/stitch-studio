@@ -6,6 +6,7 @@ import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont,
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
 import * as L from './library.js';
+import { PLATFORMS, RULES, defaultSettings, fmtTime, timesFor, buildCaptions, nextReelDay } from './post.js';
 import { Compositor, MIRRORS, TRANSITIONS, GFX, GfxLayer, newGfx, joinKey } from './fx.js';
 import { VisualTrack } from './visuals.js';
 
@@ -18,7 +19,7 @@ const STEPS = [
   { n: 3, name: 'Clean' },
   { n: 4, name: 'Edit' },
   { n: 5, name: 'Export' },
-  { n: 6, name: 'Post', soon: true },
+  { n: 6, name: 'Post' },
 ];
 
 // ---------- state ----------
@@ -36,6 +37,7 @@ const blank = () => ({
   effects: [],          // mirror effects {id, kind, start, dur}
   trans: { def: 'cut', dur: 0.3, joins: {} },
   gfx: [],              // graphics and stamps
+  postDate: '', caption: '', closer: 0, ytTitle: '', posted: {}, capEdits: {}, status: 'To record',
   scrub: 0,
 });
 const VO = () => P.mode === 'voiceover';
@@ -1044,6 +1046,7 @@ async function doExport(part) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
     window.__lastExport = { size: blob.size, type: blob.type, name };
     setStatus(`Done! Saved "${name}" to your Downloads.`, 1);
+    if (P.status !== 'Posted') { P.status = 'Edited'; save(); }
   } catch (e) {
     setStatus('Export stopped: ' + e.message);
   }
@@ -1092,12 +1095,99 @@ async function downloadCover() {
 }
 
 // ---------- Step 6: Post (later update) ----------
+let S = defaultSettings();
+async function saveSettings() { await store.put('settings', S); }
 function post() {
+  if (!P.postDate) P.postDate = nextReelDay();
+  const tm = timesFor(S, P.postDate);
+  const day = new Date(P.postDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const closers = S.closers;
+  const caps = buildCaptions(S, { body: P.caption, closer: P.closer >= 0 ? closers[P.closer] : '', title: P.ytTitle || P.title, hook: P.hook, date: P.postDate });
+  const done = PLATFORMS.filter((pl) => P.posted[pl.key]).length;
+  const tester = S.testerOn && P.postDate <= S.testerEnd;
   panel.innerHTML = `
     <h1>Post</h1>
-    <p class="sub">Coming in a later update: one card per platform (Instagram, Facebook Page, Facebook personal, TikTok, YouTube Shorts) with the post time, your caption with a copy button, each platform's rules, and checkboxes to mark it posted.</p>
-    <div class="next"><button class="btn" id="back5">← Export</button><span></span></div>`;
+    <p class="sub">Write your caption once. Each platform gets its own version with the right link, hashtags and sign-off. You post by hand; nothing connects to your accounts.</p>
+    <div class="row">
+      <label class="inline" style="margin-top:0">Posting on <input type="date" id="pdate" value="${P.postDate}"></label>
+      <span class="sub">${day}${tm.usual ? '' : ' · not a usual reel day, so Thursday times are used'}</span>
+    </div>
+    ${tester ? `<div class="note">Tester line is on until ${new Date(S.testerEnd + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. After that it drops off by itself.</div>` : ''}
+    <label>Your caption</label>
+    <textarea id="pcap" placeholder="What happened, in your words. A short story, then why it matters. Hashtags and links get added for you.">${esc(P.caption)}</textarea>
+    <div class="row">
+      <label class="inline">Closer <select id="pcloser"><option value="-1">None</option>${closers.map((c, i) => `<option value="${i}" ${+P.closer === i ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+    </div>
+    <label>YouTube title</label>
+    <input type="text" id="ptitle" maxlength="100" value="${esc(P.ytTitle || caps.ytTitle)}">
+    <div class="postbar"><b>${done} of ${PLATFORMS.length} posted</b>${done === PLATFORMS.length ? ' 🎉 All done. This reel is marked Posted.' : ''}</div>
+    <div class="pgrid">${PLATFORMS.map((pl) => {
+      const txt = P.capEdits[pl.key] ?? caps[pl.key];
+      const t = tm[pl.time];
+      return `<div class="pcard ${P.posted[pl.key] ? 'done' : ''}">
+        <div class="card-h"><b>${pl.icon} ${pl.name}</b><span class="ptime">⏰ ${fmtTime(t)}</span></div>
+        <ul class="rules">${RULES[pl.key].map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
+        ${pl.key === 'yt' ? `<div class="yttitle"><b>Title:</b> ${esc(P.ytTitle || caps.ytTitle)} <button class="chip" data-copytxt="${esc(P.ytTitle || caps.ytTitle)}">Copy title</button></div>` : ''}
+        <textarea class="ptext" data-pcap="${pl.key}">${esc(txt)}</textarea>
+        <div class="row"><button class="big pcopy" data-copy="${pl.key}">Copy caption</button>
+          ${P.capEdits[pl.key] != null ? `<button class="chip" data-reset="${pl.key}">Reset to template</button>` : ''}
+          <span class="sub">${txt.length} chars</span>
+          <label class="inline"><input type="checkbox" data-posted="${pl.key}" ${P.posted[pl.key] ? 'checked' : ''}> Posted</label></div>
+      </div>`;
+    }).join('')}</div>
+    <details class="more"><summary>Settings: post times, links, sign-off, closers, hashtags</summary>
+      <p class="hint">These apply to every reel. Times are Central.</p>
+      <table class="ttable"><tr><th></th><th>YouTube</th><th>Instagram + FB Page</th><th>TikTok</th></tr>
+        ${[[2, 'Tue'], [3, 'Wed'], [4, 'Thu']].map(([d, n]) => `<tr><td><b>${n}</b></td>${['yt', 'meta', 'tt'].map((k) => `<td><input type="time" data-st="times.${d}.${k}" value="${S.times[d][k]}"></td>`).join('')}</tr>`).join('')}
+      </table>
+      <label class="inline">Facebook personal, every reel day <input type="time" data-st="fbMe" value="${S.fbMe}"></label>
+      <label>Main link</label><input type="text" data-st="mainLink" value="${esc(S.mainLink)}">
+      <label class="inline"><input type="checkbox" data-st="testerOn" ${S.testerOn ? 'checked' : ''}> Add the tester line until <input type="date" data-st="testerEnd" value="${S.testerEnd}"></label>
+      <label>Tester line</label><input type="text" data-st="testerLine" value="${esc(S.testerLine)}">
+      <label>Tester sign-up link (Facebook)</label><input type="text" data-st="testerLink" value="${esc(S.testerLink)}">
+      <label>Sign-off (Instagram and Facebook only)</label><input type="text" data-st="signoff" value="${esc(S.signoff)}">
+      <label>Closers (one per line)</label><textarea data-st="closers">${esc(S.closers.join('\n'))}</textarea>
+      <label>Hashtags (Instagram and TikTok use the first 5, Facebook and YouTube the first 3)</label><input type="text" data-st="hashtags" value="${esc(S.hashtags)}">
+    </details>
+    <div class="next"><button class="btn" id="back5">← Export</button><span class="sub">Status: <b>${P.status}</b></span></div>`;
+
   $('#back5').onclick = () => go(5);
+  $('#pdate').onchange = (e) => { P.postDate = e.target.value; save(); render(); };
+  let capTimer;
+  $('#pcap').oninput = (e) => { P.caption = e.target.value; save(); clearTimeout(capTimer); capTimer = setTimeout(refreshCaps, 300); };
+  $('#pcloser').onchange = (e) => { P.closer = +e.target.value; save(); render(); };
+  $('#ptitle').oninput = (e) => { P.ytTitle = e.target.value; save(); };
+  $('#ptitle').onchange = () => render();
+  document.querySelectorAll('[data-pcap]').forEach((t) => (t.oninput = () => { P.capEdits[t.dataset.pcap] = t.value; save(); }));
+  document.querySelectorAll('[data-reset]').forEach((b) => (b.onclick = () => { delete P.capEdits[b.dataset.reset]; save(); render(); }));
+  const copy = async (txt, btn) => {
+    try { await navigator.clipboard.writeText(txt); } catch { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    const old = btn.textContent; btn.textContent = 'Copied ✓'; setTimeout(() => (btn.textContent = old), 1400);
+  };
+  document.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => copy(document.querySelector(`[data-pcap="${b.dataset.copy}"]`).value, b)));
+  document.querySelectorAll('[data-copytxt]').forEach((b) => (b.onclick = () => copy(b.dataset.copytxt, b)));
+  document.querySelectorAll('[data-posted]').forEach((cb) => (cb.onchange = () => {
+    P.posted[cb.dataset.posted] = cb.checked;
+    const all = PLATFORMS.every((pl) => P.posted[pl.key]);
+    if (all) P.status = 'Posted'; else if (P.status === 'Posted') P.status = 'Edited';
+    save(); render();
+  }));
+  document.querySelectorAll('[data-st]').forEach((el) => (el.onchange = async () => {
+    const k = el.dataset.st;
+    let v = el.type === 'checkbox' ? el.checked : el.value;
+    if (k === 'closers') v = el.value.split('\n').map((x) => x.trim()).filter(Boolean);
+    const ks = k.split('.'); const last = ks.pop(); ks.reduce((o, x) => o[x], S)[last] = v;
+    await saveSettings(); render();
+  }));
+}
+// Update the platform captions while typing without losing focus.
+function refreshCaps() {
+  const caps = buildCaptions(S, { body: P.caption, closer: P.closer >= 0 ? S.closers[P.closer] : '', title: P.ytTitle || P.title, hook: P.hook, date: P.postDate });
+  document.querySelectorAll('[data-pcap]').forEach((t) => {
+    if (P.capEdits[t.dataset.pcap] != null) return;
+    t.value = caps[t.dataset.pcap];
+    const n = t.parentElement.querySelector('.row .sub'); if (n) n.textContent = t.value.length + ' chars';
+  });
 }
 
 // ---------- start ----------
@@ -1135,6 +1225,8 @@ function post() {
     P.trans = { def: 'cut', dur: 0.3, joins: {}, ...P.trans };
     presets = (await store.get('presets')) || [];
     await L.loadLibrary();
+    const st = await store.get('settings');
+    if (st) S = { ...defaultSettings(), ...st, times: { ...defaultSettings().times, ...(st.times || {}) } };
   } catch (e) { console.warn(e); }
   if (P.step === 2) P.step = P.takes.length ? 3 : 2;
   syncUndo(); render();
