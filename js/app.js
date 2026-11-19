@@ -135,7 +135,7 @@ document.querySelectorAll('[data-over]').forEach((b) => (b.onclick = async () =>
     save(); render(); toast('Edits cleared. Undo brings them back.');
   } else if (kind === 'reel') {
     if (!confirm('Delete every take and edit for this reel? This can\'t be undone.')) return;
-    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx, ...P.slides]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
+    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx, ...P.slides]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); if (t.imgId) await store.del('blob:' + t.imgId); }
     const keep = { id: P.id, calId: P.calId, title: P.title, hook: P.hook, script: P.script, postDate: P.postDate, mode: P.mode, caption: P.caption, closer: P.closer, ytTitle: P.ytTitle };
     P = Object.assign(blank(), keep, { step: 2, status: 'To record' });
     undoStack = []; redoStack = []; syncUndo(); previewTrack = null; preview.removeAttribute('src');
@@ -258,7 +258,7 @@ function plan() {
     const r = reelIndex[b.dataset.delreel];
     if (!confirm(`Delete "${r.title}" and its recordings? This can't be undone.`)) return;
     const old = await store.get('reel:' + r.id);
-    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || []), ...(old.slides || [])]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
+    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || []), ...(old.slides || [])]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); if (t.imgId) await store.del('blob:' + t.imgId); }
     await store.del('reel:' + r.id); delete reelIndex[r.id]; await store.put('reelIndex', reelIndex);
     const ce = CAL.entries.find((x) => x.reelId === r.id); if (ce) { ce.reelId = null; await saveCal(); }
     render();
@@ -345,7 +345,8 @@ function hydrate(saved) {
   const d = defaultText(), t = saved.text || {};
   p.text = { hook: { ...d.hook, ...t.hook, style: { ...d.hook.style, ...(t.hook || {}).style } },
     caps: { ...d.caps, ...t.caps, style: { ...d.caps.style, ...(t.caps || {}).style } },
-    list: { ...d.list, ...t.list, style: { ...d.list.style, ...(t.list || {}).style } } };
+    list: { ...d.list, ...t.list, style: { ...d.list.style, ...(t.list || {}).style } },
+    typed: { ...d.typed, ...t.typed, style: { ...d.typed.style, ...(t.typed || {}).style } } };
   p.trans = { def: 'cut', dur: 0.3, joins: {}, ...p.trans };
   return p;
 }
@@ -520,7 +521,7 @@ function moveTake(i, d) {
   toast(`Moved. Take ${j + 1} is now "${P.takes[j].name}". B-roll, mirror and graphics stay at the same seconds, so check them in Edit.`, 5000);
 }
 
-async function addTake(blob, name) {
+async function addTake(blob, name, keepClean = false) {
   let duration = 0, audioId = null;
   const id = 't' + Date.now() + Math.random().toString(36).slice(2, 6);
   try { if (window.__FORCE_CAPTURE) throw new Error('test'); duration = (await decodeClip(blob)).duration; }
@@ -543,9 +544,78 @@ async function addTake(blob, name) {
   remember();
   P.takes.push(audioId ? { id, name, duration, audioId } : { id, name, duration });
   if (P.status === 'To record') P.status = 'Recorded';
-  P.cleaned = false; P.items = []; P.split = null;
+  if (!keepClean) { P.cleaned = false; P.items = []; P.split = null; }
   save();
+  return true;
 }
+
+// ---------- Photos on the main line ----------
+// A photo becomes a short silent clip (slow push-in), so Clean, transitions, preview and export treat it like any take.
+async function photoClip(imgBlob, sec) {
+  const img = new Image(); img.src = URL.createObjectURL(imgBlob); await img.decode();
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+  const ac = new AudioContext(); await ac.resume();
+  const dest = ac.createMediaStreamDestination(), src = ac.createConstantSource(), g = ac.createGain();
+  g.gain.value = 0; src.connect(g).connect(dest); src.start(); // silent track so every clip has sound
+  const mime = pickMime();
+  const stream = new MediaStream([...c.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+  const parts = []; rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
+  const stopped = new Promise((r) => (rec.onstop = r));
+  const draw = (p) => {
+    x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+    const s = Math.max(W / img.naturalWidth, H / img.naturalHeight) * (1 + 0.06 * p);
+    const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+    x.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  };
+  draw(0); rec.start(100);
+  const t0 = performance.now();
+  await new Promise((res) => { const tick = () => { const el = (performance.now() - t0) / 1000; draw(Math.min(1, el / sec)); if (el >= sec + 0.1) res(); else setTimeout(tick, 33); }; tick(); });
+  rec.stop(); await stopped;
+  stream.getTracks().forEach((t) => t.stop()); ac.close(); URL.revokeObjectURL(img.src);
+  return new Blob(parts, { type: mime.split(';')[0] });
+}
+async function addPhotoTake(file, sec = 3) {
+  if (/\.hei[cf]$/i.test(file.name) || /hei[cf]/i.test(file.type)) file = await heicToJpeg(file);
+  toast(`Adding ${file.name}…`, 60000);
+  const id = 't' + Date.now() + Math.random().toString(36).slice(2, 6), imgId = id + 'i';
+  const blob = await photoClip(file, sec);
+  await store.put('blob:' + imgId, file); await store.put('blob:' + id, blob);
+  urls[id] = URL.createObjectURL(blob);
+  remember();
+  P.takes.push({ id, name: file.name, duration: sec, kind: 'image', imgId, vol: 1 });
+  if (P.cleaned) P.items.push({ type: 'visual', take: P.takes.length - 1, start: 0, end: sec, cut: false, reason: '' });
+  save(); toast(`Added ${file.name}.`);
+}
+async function setPhotoSec(i, sec) {
+  const tk = P.takes[i]; if (!tk || tk.kind !== 'image') return;
+  sec = Math.min(15, Math.max(0.5, +sec || 3));
+  toast('Updating the photo…', 60000);
+  const blob = await photoClip(await store.get('blob:' + tk.imgId), sec);
+  await store.put('blob:' + tk.id, blob);
+  if (urls[tk.id]) URL.revokeObjectURL(urls[tk.id]);
+  urls[tk.id] = URL.createObjectURL(blob);
+  remember();
+  tk.duration = sec;
+  P.items = P.items.filter((it) => it.take !== i || it.type === 'visual');
+  P.items.forEach((it) => { if (it.take === i) it.end = sec; });
+  save(); render(); toast(`Photo shows for ${sec} sec.`);
+}
+// Remove one clip from the main line, keeping the cleanup of the others.
+function removeTake(i) {
+  if (!P.takes[i]) return;
+  remember();
+  P.takes.splice(i, 1);
+  P.items = P.items.filter((it) => it.take !== i).map((it) => (it.take > i ? { ...it, take: it.take - 1 } : it));
+  if (P.split) P.split = P.split.take === i ? null : P.split.take > i ? { ...P.split, take: P.split.take - 1 } : P.split;
+  const joins = {};
+  for (const [k, v] of Object.entries(P.trans.joins || {})) { const [t, st] = k.split(':'); if (+t !== i) joins[`${+t > i ? +t - 1 : +t}:${st}`] = v; }
+  P.trans.joins = joins;
+  if (!P.takes.length) { P.cleaned = false; P.items = []; }
+  save(); render();
+  toast('Removed. Undo brings it back. B-roll, mirror and graphics stay at the same seconds, so check them.', 5000);
+}
+
 
 async function addVisual(file) {
   const kind = file.type.startsWith('image/') ? 'image' : 'video';
@@ -633,7 +703,7 @@ async function makeOverlay(part) {
   if (PHOTO()) T.hook.dur = 1; // the hook sits on slide 1
   const ranges = P.cleaned ? keptRanges(P.items, P.takes, part ? P.split : null, part) : fullRanges();
   T.caps.chunks = !PHOTO() && P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges), T.caps.n) : null;
-  await Promise.all([ready(T.hook.style), ready(T.caps.style), ready(T.list.style)]);
+  await Promise.all([ready(T.hook.style), ready(T.caps.style), ready(T.list.style), ready(T.typed.style)]);
   const behind = { hook: T.hook.on && T.hook.behind, caps: T.caps.on && T.caps.behind, list: T.list.on && T.list.behind };
   const anyBehind = !VO() && (behind.hook || behind.caps || behind.list);
   if (anyBehind) await loadSegmenter();
@@ -674,11 +744,28 @@ async function makeOverlay(part) {
   };
   fn.prepare = (t) => br.prepare(t + off);
   fn.pause = () => br.pauseAll();
+  fn.audioEls = () => br.audioEls();
   return fn;
 }
 
 let playing = null;
-function stopPlaying() { if (playing) { playing.stop = true; preview.pause(); if (previewTrack) previewTrack.pauseAll(); playing = null; $('#playClean').textContent = '▶ Play'; } }
+function playLabel(on) { $('#playClean').textContent = on ? '■ Stop' : '▶ Play'; const b = $('#tlPlay'); if (b) b.textContent = on ? '■' : '▶'; }
+function stopPlaying() { if (playing) { playing.stop = true; preview.pause(); if (previewTrack) previewTrack.pauseAll(); playing = null; playLabel(false); } }
+// Preview sound goes through a gain so a take can play louder than 100%.
+let pac = null, pgain = null;
+function previewGain(v) {
+  try {
+    if (!pac) { pac = new AudioContext(); pgain = pac.createGain(); pac.createMediaElementSource(preview).connect(pgain).connect(pac.destination); }
+    pac.resume(); pgain.gain.value = v;
+  } catch { preview.volume = Math.min(1, v); }
+}
+// Moves the timeline playhead while playing (Edit step).
+function followPlayhead(t, len) {
+  const ph = $('#playhead'); if (!ph) return;
+  ph.style.left = (100 * Math.min(t, len)) / Math.max(len, 0.01) + '%';
+  const v = $('#scrubV'); if (v) v.textContent = fmt(t);
+  const sl = $('#scrub'); if (sl) sl.value = t;
+}
 $('#playClean').onclick = () => (PHOTO() ? toast('Photo posts have no playback. Use the slider in Edit to see each slide.') : playing ? stopPlaying() : play(0));
 // Plays the kept parts with everything on top, from startT for up to maxDur seconds.
 async function play(startT = 0, maxDur = Infinity) {
@@ -689,7 +776,8 @@ async function play(startT = 0, maxDur = Infinity) {
   const ov = await makeOverlay(0);
   const comp = makeComp(0, ranges);
   const track = VO() && P.visuals.length ? await getTrack() : null;
-  const run = { stop: false }; playing = run; $('#playClean').textContent = '■ Stop';
+  const run = { stop: false }; playing = run; playLabel(true);
+  const reelT = total(ranges);
   $('#emptyPreview').classList.add('hidden'); cv.classList.remove('hidden');
   let doneT = 0;
   const endT = startT + maxDur;
@@ -698,6 +786,7 @@ async function play(startT = 0, maxDur = Infinity) {
     if (doneT + len <= startT) { doneT += len; continue; }
     if (run.stop || doneT >= endT) break;
     await loadSrc(urls[P.takes[r.take].id]);
+    previewGain(P.takes[r.take].vol ?? 1);
     await seekTo(r.start + Math.max(0, startT - doneT));
     await preview.play();
     await new Promise((res) => {
@@ -705,6 +794,7 @@ async function play(startT = 0, maxDur = Infinity) {
         const local = Math.max(0, preview.currentTime - r.start), t = doneT + local;
         comp.frame(cx, (c) => (track ? track.draw(c, t, true) : drawCover(c, preview)), t, k, local);
         ov(cx, t, track ? null : preview, true);
+        if (P.step === 4) followPlayhead(t, reelT);
         (run.stop || t >= endT || preview.currentTime >= r.end - 0.02 || preview.ended) ? res() : requestAnimationFrame(chk);
       };
       chk();
@@ -714,7 +804,7 @@ async function play(startT = 0, maxDur = Infinity) {
     doneT += len;
   }
   preview.pause(); if (track) track.pauseAll(); ov.pause();
-  if (playing === run) { playing = null; $('#playClean').textContent = '▶ Play'; }
+  if (playing === run) { playing = null; playLabel(false); }
 }
 const makeComp = (part, ranges, still = false) =>
   new Compositor(P.effects, P.trans, ranges, part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0, !VO() && !still);
@@ -856,6 +946,7 @@ async function runClean() {
   const items = []; let gotWords = true;
   for (let i = 0; i < P.takes.length; i++) {
     const tk = P.takes[i];
+    if (tk.kind === 'image') { items.push({ type: 'visual', take: i, start: 0, end: tk.duration, cut: false, reason: '' }); continue; } // photos have no pauses to cut
     setStatus(`Take ${i + 1} of ${P.takes.length}: finding pauses…`, i / P.takes.length);
     const blob = await store.get('blob:' + (tk.audioId || tk.id));
     const samples = await to16kMono(await decodeClip(blob));
@@ -937,6 +1028,7 @@ function transcriptHTML() {
     const why = it.reason && it.reason !== 'kept' ? ` (${it.reason})` : '';
     if (it.type === 'word') html += `<span class="w ${it.cut ? 'cut' : ''}" data-i="${i}" title="${it.cut ? 'Cut' + why + '. Tap to put back.' : 'Tap to cut'}">${esc(it.text)}</span> `;
     else if (it.type === 'gap') html += `<span class="gap ${it.cut ? 'cut' : ''}" data-i="${i}" title="${it.cut ? 'Pause cut. Tap to keep.' : 'Pause kept. Tap to cut.'}">⏸ ${fmt(it.end - it.start)}s</span>`;
+    else if (it.type === 'visual') html += `<span class="gap ${it.cut ? 'cut' : ''}" style="background:#fdf1dc;color:#7a4f0e" data-i="${i}" title="${it.cut ? 'Photo cut. Tap to keep.' : 'Photo. Tap to cut.'}">🖼 photo ${fmt(it.end - it.start)}s</span>`;
     else if (it.type === 'manual') html += `<span class="gap ${it.cut ? 'cut' : ''}" data-i="${i}" title="${it.cut ? 'Section you removed in Edit. Tap to put it back.' : 'Put back. Tap to remove again.'}">✂ removed ${fmt(it.end - it.start)}s</span>`;
     else html += `<span class="gap ${it.cut ? 'cut' : ''}" style="background:#e6f4f1;color:#0a6466" data-i="${i}" title="${it.cut ? 'Cut. Tap to keep.' : 'Talking. Tap to cut.'}">🗣 ${fmt(it.end - it.start)}s</span>`;
   });
@@ -998,10 +1090,10 @@ function edit() {
     ${splitBarHTML(len)}
     ${editTab === 'broll' ? brollHTML(len) : editTab === 'trans' ? transHTML(len) : editTab === 'gfx' ? gfxHTML(len) : `
     <div class="scrub">
-      <label>${PHOTO() ? 'Slide' : 'See the frame at'} <b id="scrubV">${PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub)}</b>${PHOTO() ? '' : ' sec'}</label>
-      <input type="range" id="scrub" min="0" max="${PHOTO() ? Math.max(0, len - 1) : Math.max(0.1, len - 0.05).toFixed(2)}" step="${PHOTO() ? 1 : 0.05}" value="${P.scrub}">
-      <div class="row small">Drag on the preview to move:
-        ${[['hook', 'Hook'], ['caps', 'Captions'], ['list', 'List']].map(([k, n]) => `<button class="chip ${moveWhat === k ? 'on' : ''}" data-move="${k}">${n}</button>`).join('')}</div>
+      ${PHOTO() ? `<label>Slide <b id="scrubV">${Math.floor(P.scrub) + 1}</b></label>
+      <input type="range" id="scrub" min="0" max="${Math.max(0, len - 1)}" step="1" value="${P.scrub}">` : ''}
+      <div class="row small" style="padding-top:8px">Drag on the preview to move:
+        ${[['hook', 'Hook'], ['caps', 'Captions'], ['list', 'List'], ...(T.typed.on ? [['typed', 'Typed captions']] : [])].map(([k, n]) => `<button class="chip ${moveWhat === k ? 'on' : ''}" data-move="${k}">${n}</button>`).join('')}</div>
     </div>
 
     <div class="card">
@@ -1046,6 +1138,7 @@ function edit() {
       </div>
       ${styleEditor('text.list.style')}` : ''}
     </div>
+    ${PHOTO() ? '' : typedHTML(len)}
     `}
     <div class="next"><button class="btn" id="back3">← Clean</button><button class="big" id="go5">Next: Export →</button></div>`;
 
@@ -1058,8 +1151,11 @@ function edit() {
   if (editTab === 'gfx') { gfxBind(); return; }
   if (editTab !== 'text') return;
 
-  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub); repaint(); };
-  $('#scrub').onchange = () => save();
+  if (PHOTO()) {
+    $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = Math.floor(P.scrub) + 1; repaint(); };
+    $('#scrub').onchange = () => save();
+  }
+  typedBind();
   document.querySelectorAll('[data-move]').forEach((b) => (b.onclick = () => { moveWhat = b.dataset.move; render(); }));
   document.querySelectorAll('[data-tap]').forEach((b) => (b.onclick = () => { tapMode = b.dataset.tap; render(); }));
   document.querySelectorAll('details[data-box]').forEach((d) => (d.ontoggle = () => { d.open ? openBoxes.add(d.dataset.box) : openBoxes.delete(d.dataset.box); }));
@@ -1117,11 +1213,7 @@ const ENTER = { pop: 'Pop in', fade: 'Fade in', slide: 'Slide up', none: 'None' 
 function brollHTML(len) {
   const b = (i) => P.broll[i];
   return `
-    <div class="scrub">
-      <label>${PHOTO() ? 'Slide' : 'See the frame at'} <b id="scrubV">${PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub)}</b>${PHOTO() ? '' : ' sec'}</label>
-      <input type="range" id="scrub" min="0" max="${PHOTO() ? Math.max(0, len - 1) : Math.max(0.1, len - 0.05).toFixed(2)}" step="${PHOTO() ? 1 : 0.05}" value="${P.scrub}">
-      <p class="hint">Move the slider to where a photo or clip should start, then add it. Your voice keeps playing; clip sound is muted.</p>
-    </div>
+    ${scrubBlock(len, 'Move the slider to where a photo or clip should start, then add it. Your voice keeps playing; clip sound is muted unless you turn it up (tap it on the timeline).')}
     <label class="big gold" style="display:inline-block;cursor:pointer">＋ Add photo or clip at ${fmt(P.scrub)} sec
       <input type="file" id="addBroll" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
     ${libraryHTML()}
@@ -1157,8 +1249,7 @@ function brollHTML(len) {
     </div>`).join('') || '<p class="sub" style="margin-top:16px">No B-roll yet.</p>'}`;
 }
 function brollBind() {
-  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub); repaint(); };
-  $('#scrub').onchange = () => { save(); render(); };
+  bindScrub();
   $('#addBroll').onchange = async (e) => {
     let at = P.scrub;
     for (const f of e.target.files) {
@@ -1203,24 +1294,87 @@ const sectionsOf = (len) => {
   const edges = [0, ...cuts, len];
   return edges.slice(0, -1).map((a, i) => ({ a, b: edges[i + 1] }));
 };
+// ---------- Timeline (Edit, above the tabs): one line for play, time, slider and split; each take is its own clip ----------
+let selClip = null; // take index, or 'b:' + B-roll id
+const TRANS_CYCLE = Object.keys(TRANSITIONS);
+// One block per take (or photo) on the main line, with its reel times.
+function clipSpans() {
+  const out = []; let acc = 0;
+  fullRanges().forEach((r) => {
+    const d = r.end - r.start, last = out[out.length - 1];
+    if (last && last.take === r.take) last.b = acc + d;
+    else out.push({ take: r.take, a: acc, b: acc + d, r });
+    acc += d;
+  });
+  return out;
+}
+const volIcon = (v) => (v === 0 ? '🔇' : '🔊');
+function clipPanelHTML(spans) {
+  if (selClip == null) return '';
+  if (typeof selClip === 'string') {
+    const b = P.broll.find((x) => 'b:' + x.id === selClip);
+    if (!b) { selClip = null; return ''; }
+    const v = Math.round((b.vol || 0) * 100);
+    return `<div class="clippanel"><div class="row"><b class="cpname">🎞 B-roll: ${esc(b.name)}</b>
+      ${b.kind === 'video' ? `<span class="row cpvol">${volIcon(v)} <input type="range" id="cpVol" min="0" max="200" step="5" value="${v}"> <b id="cpVolV">${v}%</b>
+        <button class="chip" id="cpMute">${v ? 'Mute' : 'Sound on'}</button></span>` : '<span class="sub" style="margin:0">Photos have no sound.</span>'}
+      <button class="chip" id="cpBrollTab">Edit in B-roll</button><button class="x" id="cpClose" title="Close">✕</button></div>
+      ${b.kind === 'video' ? '<p class="hint">B-roll is muted (0%) unless you turn it up. Over 100% makes it louder.</p>' : ''}</div>`;
+  }
+  const i = selClip, tk = P.takes[i], sp = spans.find((x) => x.take === i);
+  if (!tk) { selClip = null; return ''; }
+  const img = tk.kind === 'image', v = Math.round((tk.vol ?? 1) * 100);
+  return `<div class="clippanel"><div class="row">
+      <b class="cpname">${img ? '🖼 Photo' : VO() ? '🎙 Voice ' + (i + 1) : '🎬 Take ' + (i + 1)}${sp ? ` <span class="sub" style="margin:0">${fmt(sp.a)}–${fmt(sp.b)} sec</span>` : ''}</b>
+      ${img ? `<label class="inline" style="margin:0">Shows for <input type="number" class="num" id="cpSec" min="0.5" max="15" step="0.5" value="${tk.duration}"> sec</label>`
+        : `<span class="row cpvol">${volIcon(v)} <input type="range" id="cpVol" min="0" max="200" step="5" value="${v}"> <b id="cpVolV">${v}%</b>
+        <button class="chip" id="cpMute">${v ? 'Mute' : 'Sound on'}</button></span>`}
+      <span class="row" style="gap:6px"><button class="chip" id="cpLeft" ${i ? '' : 'disabled'}>◀ Earlier</button><button class="chip" id="cpRight" ${i < P.takes.length - 1 ? '' : 'disabled'}>Later ▶</button>
+      <button class="chip danger" id="cpDel">🗑 Remove</button><button class="x" id="cpClose" title="Close">✕</button></span></div>
+      <p class="hint">${img ? 'Photos have no sound. They get a slow push-in.' : 'Over 100% boosts a quiet take.'} To trim it, split at the spot and remove that section.</p></div>`;
+}
 function splitBarHTML(len) {
   if (PHOTO()) return '';
   const secs = sectionsOf(len);
   if (secSel >= secs.length) secSel = -1;
   const pct = (t) => (100 * t) / Math.max(len, 0.01);
+  const box = (a, b) => `left:${pct(a)}%;width:${Math.max(0.8, pct(Math.min(b, len) - a))}%`;
+  const spans = clipSpans();
+  const TY = P.text.typed;
+  const cards = TY.on ? TY.cards : [];
+  const capBlocks = !cards.length ? '' : TY.mode === 'scroll'
+    ? `<button class="tclip cap" data-at="${cards[0].start}" style="${box(cards[0].start, cards[cards.length - 1].start + cards[cards.length - 1].dur)}">⇡ Scrolling text</button>`
+    : cards.map((c, i) => `<button class="tclip cap" data-at="${c.start}" style="${box(c.start, c.start + c.dur)}" title="${esc(c.text)}">${i + 1}</button>`).join('');
   const lane = (arr, cls, label) => arr.map((x) => `<div class="lane ${cls}" style="left:${pct(x.start)}%;width:${Math.max(0.6, pct(Math.min(x.dur, len - x.start)))}%" title="${label}"></div>`).join('');
   const sel = secs[secSel];
-  return `<div class="splitbox">
-    <div class="row"><b>Sections</b>
-      <button class="chip on" id="splitHere">✂ Split at ${fmt(P.scrub)} sec</button>
-      <span class="hint" style="margin:0">Move the slider, split, then tap a section to change just that part.</span></div>
-    <div class="tl" id="tl">
-      <div class="secs">${secs.map((x, i) => `<button class="sec ${i === secSel ? 'on' : ''}" data-sec="${i}" style="flex:${x.b - x.a}">${i + 1}<small>${fmt(x.a)}–${fmt(x.b)}</small></button>`).join('')}</div>
-      <div class="lanes">${lane(P.broll, 'lb', 'B-roll')}${lane(P.effects, 'lm', 'Mirror')}${lane(P.gfx, 'lg', 'Graphic')}</div>
-      ${secs.slice(1).map((x) => `<button class="cutmark" data-unsplit="${x.a}" style="left:${pct(x.a)}%" title="Remove this split">✂</button>`).join('')}
-      <div class="playhead" style="left:${pct(P.scrub)}%"></div>
+  return `<div class="splitbox tlbox">
+    <div class="tlrow">
+      <button class="btn tlplay" id="tlPlay" title="Play from the slider">${playing ? '■' : '▶'}</button>
+      <span class="tltime"><b id="scrubV">${fmt(P.scrub)}</b> / ${fmt(len)} sec</span>
+      <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
+      <button class="chip on" id="splitHere" title="Cut the reel into sections at the slider">✂ Split here</button>
     </div>
-    <div class="legend"><span class="dot" style="background:#e8a33d"></span>B-roll <span class="dot" style="background:#8a63d2"></span>Mirror <span class="dot" style="background:#0f8b8d"></span>Graphics · tap ✂ on a split line to remove it</div>
+    <div class="tl" id="tl"><div class="tlin" id="tlin">
+      <div class="lname">Captions</div>
+      <div class="tlane">${capBlocks || '<span class="lempty">Type captions in the Text tab</span>'}</div>
+      <div class="lname">B-roll <span>(your voice keeps playing)</span></div>
+      <div class="tlane">${P.broll.map((b) => `<button class="tclip broll ${selClip === 'b:' + b.id ? 'sel' : ''}" data-bclip="${b.id}" style="${box(b.start, b.start + b.dur)}" title="${esc(b.name)}">${b.kind === 'video' ? volIcon(b.vol || 0) + ' ' : ''}${esc(b.name)}</button>`).join('') || '<span class="lempty">None yet</span>'}</div>
+      <div class="lname">Main line</div>
+      <div class="tlane main">
+        ${spans.map((sp) => { const tk = P.takes[sp.take], img = tk.kind === 'image'; return `<button class="tclip ${img ? 'photo' : 'video'} ${selClip === sp.take ? 'sel' : ''}" data-clip="${sp.take}" style="${box(sp.a, sp.b)}" title="${esc(tk.name)}">${img ? '🖼 Photo' : `${volIcon(tk.vol ?? 1)} ${VO() ? 'Voice' : 'Take'} ${sp.take + 1}`} · ${fmt(sp.b - sp.a)}s</button>`; }).join('')}
+        ${VO() ? '' : spans.slice(1).map((sp) => { const k = joinKey(sp.r), kind = (P.trans.joins || {})[k] || P.trans.def || 'cut'; return `<button class="tdia ${kind !== 'cut' ? 'on' : ''}" data-dia="${k}" style="left:${pct(sp.a)}%" title="${TRANSITIONS[kind]}. Tap to change."></button>`; }).join('')}
+      </div>
+      ${P.effects.length || P.gfx.length ? `<div class="lanes small2">${lane(P.effects, 'lm', 'Mirror')}${lane(P.gfx, 'lg', 'Graphic')}</div>` : ''}
+      ${secs.length > 1 ? `<div class="secs">${secs.map((x, i) => `<button class="sec ${i === secSel ? 'on' : ''}" data-sec="${i}" style="flex:${x.b - x.a}">Section ${i + 1}</button>`).join('')}</div>` : ''}
+      ${secs.slice(1).map((x) => `<div class="splitline" style="left:${pct(x.a)}%"></div><button class="cutmark" data-unsplit="${x.a}" style="left:${pct(x.a)}%" title="Remove this split">✂</button>`).join('')}
+      <div class="playhead" id="playhead" style="left:${pct(P.scrub)}%"></div>
+    </div>
+    ${VO() ? '' : `<label class="tplus" title="Add a photo or video to the end">＋<input type="file" id="addMain" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>`}
+    </div>
+    <div class="legend"><span class="dot" style="background:#0f8b8d"></span>Video <span class="dot" style="background:#e8a33d"></span>Photo <span class="dot" style="background:#bfe8d9"></span>B-roll <span class="dot" style="background:#a99be6"></span>Captions
+      ${P.effects.length ? '<span class="dot" style="background:#8a63d2"></span>Mirror' : ''} ${P.gfx.length ? '<span class="dot" style="background:#1d2433"></span>Graphics' : ''}
+      ${VO() || spans.length < 2 ? '' : '· tap ◆ for a transition'} · tap a clip for volume</div>
+    ${clipPanelHTML(spans)}
     ${sel ? `<div class="secact">
       <b>Section ${secSel + 1}: ${fmt(sel.a)}–${fmt(sel.b)} sec (${fmt(sel.b - sel.a)} sec)</b>
       <div class="row">
@@ -1263,17 +1417,81 @@ function removeSection(a, b) {
   shiftAfter(a, b);
 }
 function splitBind(len) {
+  const pct = (t) => (100 * t) / Math.max(len, 0.01);
+  const setScrub = (v, slider = true) => {
+    P.scrub = Math.max(0, Math.min(len - 0.05, v));
+    $('#scrubV').textContent = fmt(P.scrub); $('#playhead').style.left = pct(P.scrub) + '%';
+    if (slider) $('#scrub').value = P.scrub;
+    $('#splitHere').title = `Split at ${fmt(P.scrub)} sec`;
+    repaint();
+  };
+  $('#scrub').oninput = (e) => setScrub(+e.target.value, false);
+  $('#scrub').onchange = () => save();
+  $('#tlPlay').onclick = () => (playing ? stopPlaying() : play(P.scrub >= len - 0.15 ? 0 : P.scrub));
   $('#splitHere').onclick = () => {
     if (P.scrub < 0.1 || P.scrub > len - 0.1) { toast('Move the slider to the spot you want to split first.'); return; }
     remember(); P.splits = [...(P.splits || []), +P.scrub.toFixed(2)];
     const secs = sectionsOf(len); secSel = secs.findIndex((x) => x.a >= P.scrub - 0.01);
     save(); render();
   };
-  $('#tl').onclick = (e) => {
-    if (e.target.closest('[data-sec],[data-unsplit]')) return;
-    const r = $('#tl').getBoundingClientRect();
-    P.scrub = Math.max(0, Math.min(len - 0.05, ((e.clientX - r.left) / r.width) * len)); render();
+  $('#tlin').onclick = (e) => {
+    if (e.target.closest('button,label,input')) return;
+    const r = $('#tlin').getBoundingClientRect();
+    setScrub(((e.clientX - r.left) / r.width) * len);
+    save();
   };
+  document.querySelectorAll('[data-clip]').forEach((b) => (b.onclick = () => {
+    const i = +b.dataset.clip; selClip = selClip === i ? null : i;
+    const sp = clipSpans().find((x) => x.take === i); if (sp) P.scrub = Math.min(sp.a + 0.05, len - 0.05);
+    render();
+  }));
+  document.querySelectorAll('[data-bclip]').forEach((b) => (b.onclick = () => {
+    const k = 'b:' + b.dataset.bclip; selClip = selClip === k ? null : k;
+    const x = P.broll.find((y) => y.id === b.dataset.bclip); if (x) P.scrub = Math.min(x.start + 0.05, len - 0.05);
+    render();
+  }));
+  document.querySelectorAll('[data-at]').forEach((b) => (b.onclick = () => { setScrub(+b.dataset.at + 0.05); save(); }));
+  document.querySelectorAll('[data-dia]').forEach((b) => (b.onclick = () => {
+    const k = b.dataset.dia, cur = (P.trans.joins || {})[k] || P.trans.def || 'cut';
+    const next = TRANS_CYCLE[(TRANS_CYCLE.indexOf(cur) + 1) % TRANS_CYCLE.length];
+    remember(); P.trans.joins = { ...(P.trans.joins || {}), [k]: next };
+    save(); render(); toast(`Transition: ${TRANSITIONS[next]}. Tap again for the next one.`, 2000);
+    const at = clipSpans().find((x) => joinKey(x.r) === k); if (at) play(Math.max(0, at.a - 0.6), 1.6);
+  }));
+  if ($('#addMain')) $('#addMain').onchange = async (e) => {
+    const files = [...e.target.files]; e.target.value = '';
+    for (const f of files) {
+      if (f.type.startsWith('image/') || /\.hei[cf]$/i.test(f.name)) await addPhotoTake(f);
+      else if (await addTake(f, f.name, true) && P.cleaned) toast(`Added ${f.name}. It isn't cleaned yet. Go to Clean and press "Clean again" if you want its pauses cut.`, 6000);
+    }
+    selClip = P.takes.length - 1; render();
+  };
+  // selected clip
+  const setVol = (v) => {
+    remember();
+    if (typeof selClip === 'string') { const b = P.broll.find((x) => 'b:' + x.id === selClip); if (b) b.vol = v; }
+    else if (P.takes[selClip]) P.takes[selClip].vol = v;
+    save();
+  };
+  if ($('#cpVol')) {
+    $('#cpVol').oninput = (e) => { $('#cpVolV').textContent = e.target.value + '%'; };
+    $('#cpVol').onchange = (e) => { setVol(+e.target.value / 100); render(); };
+    $('#cpMute').onclick = () => {
+      const cur = typeof selClip === 'string' ? (P.broll.find((x) => 'b:' + x.id === selClip) || {}).vol || 0 : P.takes[selClip].vol ?? 1;
+      setVol(cur ? 0 : 1); render();
+    };
+  }
+  if ($('#cpClose')) $('#cpClose').onclick = () => { selClip = null; render(); };
+  if ($('#cpBrollTab')) $('#cpBrollTab').onclick = () => { moveWhat = selClip; editTab = 'broll'; render(); };
+  if ($('#cpLeft')) $('#cpLeft').onclick = () => { const i = selClip; if (i > 0) { selClip = i - 1; moveTake(i, -1); } };
+  if ($('#cpRight')) $('#cpRight').onclick = () => { const i = selClip; if (i < P.takes.length - 1) { selClip = i + 1; moveTake(i, 1); } };
+  if ($('#cpDel')) $('#cpDel').onclick = () => {
+    const tk = P.takes[selClip]; if (!tk) return;
+    if (!confirm(`Remove ${tk.kind === 'image' ? 'this photo' : 'Take ' + (selClip + 1)} from the reel? Undo brings it back.`)) return;
+    const i = selClip; selClip = null; removeTake(i);
+  };
+  if ($('#cpSec')) $('#cpSec').onchange = (e) => setPhotoSec(selClip, +e.target.value);
+  // sections
   document.querySelectorAll('[data-sec]').forEach((b) => (b.onclick = () => {
     const i = +b.dataset.sec; secSel = secSel === i ? -1 : i;
     if (secSel >= 0) P.scrub = Math.min(sectionsOf(len)[i].a + 0.05, len - 0.05);
@@ -1306,15 +1524,61 @@ function splitBind(len) {
   };
 }
 
+// ---------- Typed captions (Text tab): for reels where the words do the work ----------
+const TYPED_MODES = { whole: 'Spread across the whole reel', clip: 'Spread across one clip', scroll: 'Scroll up like a teleprompter' };
+function typedHTML(len) {
+  const TY = P.text.typed, spans = clipSpans();
+  return `<div class="card">
+    <div class="card-h"><label class="inline big-l"><input type="checkbox" data-k="text.typed.on" data-type="bool" data-re ${TY.on ? 'checked' : ''}> Type captions</label>
+      <span class="sub">${TY.cards.length ? TY.cards.length + ' cards' : 'for reels with no talking'}</span></div>
+    ${!TY.on ? '<p class="hint">For reading, reactions or B-roll where you\'re not talking and the words do the work.</p>' : `
+    <textarea id="typedLines" placeholder="One line per caption card, e.g.&#10;Kids and dogs are *better than adults*&#10;You love being outside, especially *cartwheels*">${esc(TY.lines)}</textarea>
+    <p class="hint">One line = one caption card. Put *stars* around words to make them yellow.${P.text.caps.on ? ' Your speech captions are on too; turn them off above if you only want these.' : ''}</p>
+    <div class="row">
+      <select id="typedMode">${Object.entries(TYPED_MODES).map(([k, n]) => `<option value="${k}" ${TY.mode === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      ${TY.mode === 'clip' ? `<select id="typedClip">${spans.map((sp) => `<option value="${sp.take}" ${TY.clip === sp.take ? 'selected' : ''}>${P.takes[sp.take].kind === 'image' ? 'Photo' : 'Take ' + (sp.take + 1)} (${fmt(sp.a)}–${fmt(sp.b)} sec)</option>`).join('')}</select>` : ''}
+      <button class="big" id="typedMake" style="margin:0;font-size:15px;padding:10px 18px">${TY.cards.length ? 'Update caption cards' : 'Make caption cards'}</button>
+    </div>
+    ${TY.mode === 'scroll' ? '' : `<label class="inline">Animation <select data-k="text.typed.anim" data-type="str">${['pop', 'bounce', 'fade', 'none'].map((a) => `<option value="${a}" ${TY.anim === a ? 'selected' : ''}>${ANIMS[a]}</option>`).join('')}</select></label>`}
+    ${TY.cards.length ? `<details class="more" ${TY.cards.length <= 6 ? 'open' : ''}><summary>Timing for each card (${TY.cards.length})</summary>
+      ${TY.cards.map((c, i) => `<div class="row joinrow"><b style="min-width:24px">${i + 1}</b><span style="flex:1;min-width:160px">${esc(c.text)}</span>${timeRow('text.typed.cards', i, c)}</div>`).join('')}</details>` : ''}
+    ${styleEditor('text.typed.style')}`}
+  </div>`;
+}
+function makeTypedCards() {
+  const TY = P.text.typed, len = reelLen();
+  const lines = TY.lines.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) { toast('Type at least one line first.'); return; }
+  let a = 0, b = len;
+  if (TY.mode === 'clip') { const sp = clipSpans().find((x) => x.take === TY.clip) || clipSpans()[0]; if (sp) { a = sp.a; b = sp.b; } }
+  else if (TY.mode === 'whole' && P.text.hook.on && (P.text.hook.text || P.hook)) a = Math.min(P.text.hook.dur, len / 2); // start after the hook
+  const each = (b - a) / lines.length;
+  remember();
+  TY.cards = lines.map((text, i) => ({ id: newId('c'), text, start: +(a + i * each).toFixed(2), dur: +Math.max(0.3, each - 0.02).toFixed(2) }));
+  P.scrub = Math.min(a + 0.1, len - 0.05);
+  save(); render(); toast(`${lines.length} caption cards. Drag them into place with the Timing list, or tap them on the timeline.`);
+}
+function typedBind() {
+  if (!$('#typedLines')) return;
+  $('#typedLines').addEventListener('focus', () => remember(), { once: true });
+  $('#typedLines').oninput = (e) => { P.text.typed.lines = e.target.value; save(); };
+  $('#typedMode').onchange = (e) => { remember(); P.text.typed.mode = e.target.value; save(); render(); };
+  if ($('#typedClip')) $('#typedClip').onchange = (e) => { P.text.typed.clip = +e.target.value; save(); };
+  $('#typedMake').onclick = makeTypedCards;
+  bindTimed();
+}
+
 // ---------- shared bits for timed items ----------
 const newId = (p) => p + Date.now() + Math.random().toString(36).slice(2, 6);
 function scrubBlock(len, hint) {
+  if (!PHOTO()) return hint ? `<p class="hint">${hint}</p>` : '';
   return `<div class="scrub">
-      <label>${PHOTO() ? 'Slide' : 'See the frame at'} <b id="scrubV">${PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub)}</b>${PHOTO() ? '' : ' sec'}</label>
-      <input type="range" id="scrub" min="0" max="${PHOTO() ? Math.max(0, len - 1) : Math.max(0.1, len - 0.05).toFixed(2)}" step="${PHOTO() ? 1 : 0.05}" value="${P.scrub}">
+      <label>Slide <b id="scrubV">${Math.floor(P.scrub) + 1}</b></label>
+      <input type="range" id="scrub" min="0" max="${Math.max(0, len - 1)}" step="1" value="${P.scrub}">
       ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
 }
 function bindScrub() {
+  if (!PHOTO()) return; // the timeline slider handles reels
   $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub); repaint(); };
   $('#scrub').onchange = () => { save(); render(); };
 }
@@ -1591,7 +1855,7 @@ async function doExport(part) {
   document.querySelectorAll('[data-exp]').forEach((b) => (b.disabled = true));
   setStatus('Exporting… this plays through once, so it takes about as long as the reel.', 0);
   try {
-    const opts = { overlay: await makeOverlay(part), comp: makeComp(part, ranges) };
+    const opts = { overlay: await makeOverlay(part), comp: makeComp(part, ranges), vols: P.takes.map((t) => t.vol ?? 1) };
     if (VO() && P.visuals.length) {
       opts.track = makeTrack();
       opts.offset = part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0;

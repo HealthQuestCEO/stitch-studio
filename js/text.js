@@ -157,6 +157,23 @@ export function drawText(ctx, T, t, layers = { hook: true, caps: true, list: tru
       drawWords(ctx, T.caps.style, words, W * T.caps.x, H * T.caps.y, animFor(kind === 'karaoke' || kind === 'word' ? 'none' : kind, t - c.s));
     }
   }
+  // Typed captions: cards you typed, or one block scrolling up like a teleprompter
+  const TY = T.typed;
+  if (layers.caps && TY && TY.on && TY.cards && TY.cards.length) {
+    const parse = (ln) => ln.split(/\s+/).filter(Boolean).map((w) => ({ text: w.replace(/^\*|\*$/g, ''), hl: /^\*.*\*$/.test(w) }));
+    if (TY.mode === 'scroll') {
+      const a = TY.cards[0].start, last = TY.cards[TY.cards.length - 1], b = last.start + last.dur;
+      if (t >= a && t < b) {
+        const gap = TY.style.size * 1.5, blockH = TY.cards.length * gap;
+        const p = (t - a) / Math.max(0.1, b - a);
+        const top = H - p * (H + blockH); // enters at the bottom, leaves at the top
+        TY.cards.forEach((c, i) => drawWords(ctx, TY.style, parse(c.text), W * TY.x, top + i * gap + gap / 2));
+      }
+    } else {
+      const c = TY.cards.find((x) => t >= x.start && t < x.start + x.dur);
+      if (c) drawWords(ctx, TY.style, parse(c.text), W * TY.x, H * TY.y, animFor(TY.anim, t - c.start));
+    }
+  }
   // List lines, one at a time
   if (layers.list && T.list.on && T.list.lines.trim()) {
     const lines = T.list.lines.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -176,5 +193,7 @@ export function defaultText() {
     hook: { on: true, text: '', part2: 'Part 2', dur: 2, x: 0.5, y: 0.2, anim: 'pop', behind: false, style: { ...MY_STYLE, size: 92 } },
     caps: { on: true, n: 2, anim: 'karaoke', x: 0.5, y: 0.72, behind: false, skipUnderHook: false, style: { ...MY_STYLE } },
     list: { on: false, lines: '', start: 2, every: 2.5, x: 0.5, y: 0.3, behind: false, style: { ...MY_STYLE, size: 64 } },
+    // typed captions for videos where the words do the work (no talking)
+    typed: { on: false, lines: '', mode: 'whole', clip: 0, cards: [], anim: 'pop', x: 0.5, y: 0.6, behind: false, style: { ...MY_STYLE } },
   };
 }

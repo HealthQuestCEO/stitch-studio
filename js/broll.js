@@ -1,5 +1,5 @@
 // B-roll: photos and clips over your voice, full screen or framed over you.
-// Your audio keeps playing; clip sound is muted.
+// Your audio keeps playing; clip sound is muted unless you turn its volume up (b.vol, 0-2).
 import { W, H, drawCover } from './export.js';
 import { loadFont } from './text.js';
 
@@ -105,7 +105,7 @@ export class BrollLayer {
         const img = new Image(); img.src = url; await img.decode().catch(() => {}); this.els[b.id] = img;
       } else {
         const v = document.createElement('video');
-        v.src = url; v.muted = true; v.playsInline = true; v.preload = 'auto';
+        v.src = url; v.muted = !(b.vol > 0); v.volume = Math.min(1, b.vol || 0); v.playsInline = true; v.preload = 'auto';
         await new Promise((r) => { v.onloadeddata = r; v.onerror = r; });
         this.els[b.id] = v;
       }
@@ -153,6 +153,9 @@ export class BrollLayer {
       }
     }
   }
+
+  // Clips with their sound turned up, for the export mix.
+  audioEls() { return this.items.filter((b) => b.kind === 'video' && b.vol > 0 && this.els[b.id]).map((b) => ({ el: this.els[b.id], vol: b.vol })); }
 
   pauseAll() { Object.values(this.els).forEach((e) => e instanceof HTMLVideoElement && e.pause()); }
 }

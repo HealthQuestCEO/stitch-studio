@@ -203,18 +203,48 @@ mark{background:#ffe066;border-radius:3px;padding:0 2px}
 .reelrow b{flex:1}
 .reelrow.cur{background:#effaf7}
 
-/* split tool */
+/* timeline (Edit, above the tabs) */
 .splitbox{background:#f6f8fb;border-radius:14px;padding:10px 14px 12px;margin:8px 0 14px}
-.tl{position:relative;margin-top:8px;cursor:pointer;padding-bottom:4px}
-.secs{display:flex;gap:3px;height:46px}
-.sec{border:2px solid var(--line);background:#fff;border-radius:8px;font-weight:800;font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:28px;overflow:hidden;padding:0}
-.sec small{font-weight:500;font-size:10px;color:var(--muted);white-space:nowrap}
-.sec.on{border-color:var(--teal);background:#effaf7}
+.tlrow{display:flex;align-items:center;gap:10px}
+.tlrow input[type=range]{flex:1;width:auto}
+.tlplay{padding:8px 14px;font-size:15px}
+.tltime{font-size:14px;color:var(--muted);white-space:nowrap;min-width:110px}
+.tltime b{color:var(--ink)}
+.tl{position:relative;margin-top:10px;padding-right:46px}
+.tlin{position:relative;cursor:pointer}
+.lname{font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 2px}
+.lname span{font-weight:400}
+.tlane{position:relative;height:30px}
+.tlane.main{height:44px}
+.lempty{font-size:12px;color:#aab0bc;line-height:30px}
+.tclip{position:absolute;top:0;bottom:0;border:0;border-radius:7px;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;cursor:pointer}
+.tclip.video{background:var(--teal);color:#fff;border-right:2px solid #f6f8fb}
+.tclip.photo{background:var(--gold);color:#412402;border-right:2px solid #f6f8fb}
+.tclip.broll{background:var(--mint);color:#085041;border:1px solid #8fd3bb}
+.tclip.cap{background:#eeedfe;color:#3c3489;border:1px solid #a99be6;font-weight:600}
+.tclip.sel{outline:3px solid var(--red);outline-offset:1px;z-index:2}
+.tdia{position:absolute;top:50%;width:20px;height:20px;transform:translate(-50%,-50%) rotate(45deg);background:#fff;border:2px solid var(--ink);border-radius:4px;padding:0;z-index:3;cursor:pointer}
+.tdia.on{background:var(--yellow)}
+.tdia:hover{transform:translate(-50%,-50%) rotate(45deg) scale(1.15)}
+.tplus{position:absolute;right:0;bottom:0;width:38px;height:44px;margin:0;border:2px dashed #b9c0cc;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--muted);cursor:pointer;font-weight:400}
+.tplus:hover{border-color:var(--teal);color:var(--teal)}
 .lanes{position:relative;height:16px;margin-top:3px}
+.lanes.small2{height:10px;margin-top:6px}
 .lane{position:absolute;height:4px;border-radius:2px}
-.lane.lb{top:0;background:#e8a33d}.lane.lm{top:6px;background:#8a63d2}.lane.lg{top:12px;background:#0f8b8d}
-.cutmark{position:absolute;top:-10px;transform:translateX(-50%);border:0;background:var(--ink);color:#fff;border-radius:6px;font-size:11px;padding:1px 4px;cursor:pointer}
-.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--red);pointer-events:none}
+.lane.lb{top:0;background:#e8a33d}.lane.lm{top:0;background:#8a63d2}.lane.lg{top:6px;background:var(--ink)}
+.secs{display:flex;gap:3px;height:22px;margin-top:6px}
+.sec{border:1px solid var(--line);background:#fff;border-radius:6px;font-weight:700;font-size:11px;color:var(--muted);min-width:28px;overflow:hidden;white-space:nowrap;padding:0}
+.sec.on{border-color:var(--teal);background:#effaf7;color:var(--teal-dk)}
+.splitline{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed var(--ink);opacity:.5;pointer-events:none}
+.cutmark{position:absolute;top:-6px;transform:translateX(-50%);border:0;background:var(--ink);color:#fff;border-radius:6px;font-size:11px;padding:1px 4px;cursor:pointer;z-index:4}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--red);pointer-events:none;z-index:5}
+.clippanel{margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.clippanel .row{gap:10px}
+.cpname{min-width:130px}
+.cpvol{flex:1;gap:8px;flex-wrap:nowrap;white-space:nowrap}
+.cpvol input[type=range]{flex:1;min-width:120px;width:auto}
+.chip.danger{color:var(--red);border-color:#f3c0bf}
+.chip:disabled{opacity:.4;cursor:default}
 .secact{margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .btn.danger{color:var(--red);border-color:#f3c0bf}
 
