@@ -130,7 +130,10 @@ export function mergeImport(old, incoming) {
     if (!m) return n;
     used.add(m.id);
     const rank = (s) => STATUSES.indexOf(s);
-    return { ...n, id: m.id, reelId: m.reelId, status: rank(m.status) > rank(n.status) ? m.status : n.status };
+    // anything you typed in the app (filled brackets, a new hook) wins over the sheet
+    const kept = {};
+    for (const k of Object.keys(m.edited || {})) kept[k] = m[k];
+    return { ...n, ...kept, edited: m.edited, id: m.id, reelId: m.reelId, status: rank(m.status) > rank(n.status) ? m.status : n.status };
   });
   // keep entries you added in the app that aren't in the sheet
   for (const o of old) if (!used.has(o.id) && o.manual) out.push(o);

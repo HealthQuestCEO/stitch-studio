@@ -238,7 +238,7 @@ function plan() {
   ['title', 'hook', 'script'].forEach((k) => ($('#' + k).oninput = (e) => {
     P[k] = e.target.value; save();
     const ce = CAL.entries.find((x) => x.id === P.calId);
-    if (ce && k !== 'title') { ce[k] = P[k]; saveCal(); }
+    if (ce && k !== 'title') { ce[k] = P[k]; ce.edited = { ...(ce.edited || {}), [k]: true }; saveCal(); }
   }));
   $('#go2').onclick = () => go(2);
   document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { remember(); P.mode = b.dataset.mode; save(); render(); }));
@@ -277,7 +277,7 @@ function calendarBind() {
         if (r && r.postDate !== ce.date) { r.postDate = ce.date; await store.put('reel:' + r.id, r); }
       }
       calCursor = incoming[0].date; calView = 'month';
-      toast(had ? `Updated ${incoming.length} posts from your calendar. Your reels and progress were kept.` : `Imported ${incoming.length} posts.`);
+      toast(had ? `Updated ${incoming.length} posts from your calendar. Your reels, progress and anything you typed here were kept.` : `Imported ${incoming.length} posts.`);
       render();
     } catch (err) { toast('Couldn\'t read that file: ' + err.message, 6000); }
   };
@@ -309,7 +309,7 @@ function calendarBind() {
   document.querySelectorAll('[data-ef]').forEach((el) => {
     const k = el.dataset.ef;
     const set = async () => {
-      sel[k] = el.value; await saveCal();
+      sel[k] = el.value; if (['topic', 'hook', 'script', 'type'].includes(k)) sel.edited = { ...(sel.edited || {}), [k]: true }; await saveCal();
       if (sel.reelId === P.id && ['hook', 'script'].includes(k)) { P[k] = el.value; save(); }
       else if (sel.reelId && ['hook', 'script', 'date'].includes(k)) { const r = await store.get('reel:' + sel.reelId); if (r) { r[k === 'date' ? 'postDate' : k] = el.value; await store.put('reel:' + r.id, r); } }
     };
