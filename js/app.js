@@ -108,6 +108,34 @@ function render() {
   setTimer(cleanLen());
 }
 
+// ---------- Start over ----------
+$('#startOver').onclick = () => $('#overModal').classList.remove('hidden');
+$('#overCancel').onclick = () => $('#overModal').classList.add('hidden');
+$('#overModal').onclick = (e) => { if (e.target.id === 'overModal') $('#overModal').classList.add('hidden'); };
+document.querySelectorAll('[data-over]').forEach((b) => (b.onclick = async () => {
+  const kind = b.dataset.over;
+  $('#overModal').classList.add('hidden');
+  stopPlaying(); stopCamera();
+  if (kind === 'clean') {
+    if (!P.takes.length) { toast('Record a take first.'); return; }
+    remember(); P.cleaned = false; P.items = []; P.split = null; P.step = 3; save(); render(); runClean();
+  } else if (kind === 'edits') {
+    remember();
+    const keepHook = P.text.hook.text;
+    P.text = defaultText(); P.text.hook.text = keepHook;
+    P.broll = []; P.effects = []; P.gfx = []; P.splits = []; P.trans = { def: 'cut', dur: 0.3, joins: {} };
+    save(); render(); toast('Edits cleared. Undo brings them back.');
+  } else if (kind === 'reel') {
+    if (!confirm('Delete every take and edit for this reel? This can\'t be undone.')) return;
+    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
+    const keep = { id: P.id, calId: P.calId, title: P.title, hook: P.hook, script: P.script, postDate: P.postDate, mode: P.mode, caption: P.caption, closer: P.closer, ytTitle: P.ytTitle };
+    P = Object.assign(blank(), keep, { step: 2, status: 'To record' });
+    undoStack = []; redoStack = []; syncUndo(); previewTrack = null; preview.removeAttribute('src');
+    const ce = CAL.entries.find((x) => x.id === P.calId); if (ce) { ce.status = 'To record'; await saveCal(); }
+    save(); render(); toast('Fresh start. Your hook and script are still here.');
+  }
+}));
+
 // ---------- Step 1: Plan ----------
 let CAL = { entries: [] }, reelIndex = {};
 let calView = 'month', calCursor = new Date().toISOString().slice(0, 10), calSel = null;

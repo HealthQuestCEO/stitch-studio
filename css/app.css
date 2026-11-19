@@ -217,3 +217,14 @@ mark{background:#ffe066;border-radius:3px;padding:0 2px}
 .playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--red);pointer-events:none}
 .secact{margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .btn.danger{color:var(--red);border-color:#f3c0bf}
+
+/* start over */
+.modal{position:fixed;inset:0;background:rgba(20,25,35,.45);display:flex;align-items:center;justify-content:center;z-index:30}
+.modal-card{background:#fff;border-radius:18px;padding:24px;max-width:520px;width:92%}
+.modal-card h2{margin:0 0 4px}
+.over{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:14px;padding:14px 16px;margin:10px 0}
+.over b{display:block;font-size:16px}
+.over span{color:var(--muted);font-size:13px}
+.over:hover{border-color:var(--teal);background:#effaf7}
+.over.danger b{color:var(--red)}
+.over.danger:hover{border-color:var(--red);background:#fdecec}
