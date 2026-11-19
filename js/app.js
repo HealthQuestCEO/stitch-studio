@@ -6,6 +6,7 @@ import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont,
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
 import * as L from './library.js';
+import { Compositor, MIRRORS, TRANSITIONS, GFX, GfxLayer, newGfx, joinKey } from './fx.js';
 import { VisualTrack } from './visuals.js';
 
 const $ = (s) => document.querySelector(s);
@@ -32,6 +33,9 @@ const blank = () => ({
   visuals: [],          // voice-over: {id, kind, name, sec}
   text: defaultText(),  // hook, captions, list
   broll: [],            // photos/clips over you
+  effects: [],          // mirror effects {id, kind, start, dur}
+  trans: { def: 'cut', dur: 0.3, joins: {} },
+  gfx: [],              // graphics and stamps
   scrub: 0,
 });
 const VO = () => P.mode === 'voiceover';
@@ -39,7 +43,7 @@ let P = blank();
 const urls = {};        // take id -> object URL
 let undoStack = [], redoStack = [];
 
-const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text, broll: P.broll });
+const snap = () => JSON.stringify({ items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text, broll: P.broll, effects: P.effects, trans: P.trans, gfx: P.gfx });
 function remember() { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncUndo(); }
 function restore(s) { Object.assign(P, JSON.parse(s)); save(); render(); }
 $('#undo').onclick = () => { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); syncUndo(); };
@@ -114,7 +118,7 @@ function plan() {
   document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { remember(); P.mode = b.dataset.mode; save(); render(); }));
   $('#newReel').onclick = async () => {
     if (!confirm('Start a new reel? This clears the takes and cleanup for the current one.')) return;
-    for (const t of [...P.takes, ...P.visuals, ...P.broll]) await store.del('blob:' + t.id);
+    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx]) await store.del('blob:' + t.id);
     P = blank(); undoStack = []; redoStack = []; syncUndo(); save(); render();
   };
 }
@@ -288,7 +292,8 @@ function locate(t, ranges) {
   const r = ranges[ranges.length - 1];
   return r ? { take: r.take, src: Math.max(r.start, r.end - 0.04) } : null;
 }
-let stillBusy = false, stillAgain = null;
+let stillBusy = false, stillAgain = null, _still = null;
+const stillCanvas = () => { if (!_still) { _still = document.createElement('canvas'); _still.width = W; _still.height = H; } return _still; };
 async function stillAt(t) {
   if (playing) return;
   if (stillBusy) { stillAgain = t; return; }
@@ -298,17 +303,21 @@ async function stillAt(t) {
     if (!P.takes.length || !ranges.length) { cv.classList.add('hidden'); $('#emptyPreview').classList.remove('hidden'); return; }
     $('#emptyPreview').classList.add('hidden'); cv.classList.remove('hidden');
     const ov = await makeOverlay(0);
+    const comp = makeComp(0, ranges, true);
     if (VO()) {
-      cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
-      if (P.visuals.length) await (await getTrack()).still(cx, t);
-      await ov.prepare(t); ov(cx, t, null);
+      const vc = stillCanvas(); const vx = vc.getContext('2d');
+      vx.fillStyle = '#000'; vx.fillRect(0, 0, W, H);
+      if (P.visuals.length) await (await getTrack()).still(vx, t);
+      await ov.prepare(t);
+      comp.frame(cx, (c) => c.drawImage(vc, 0, 0), t, 0, 1);
+      ov(cx, t, null);
     } else {
       const loc = locate(t, ranges);
       await loadSrc(urls[P.takes[loc.take].id]);
       await seekTo(loc.src);
-      cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
-      drawCover(cx, preview);
-      await ov.prepare(t); ov(cx, t, preview);
+      await ov.prepare(t);
+      comp.frame(cx, (c) => drawCover(c, preview), t, 0, 1);
+      ov(cx, t, preview);
     }
   } finally {
     stillBusy = false;
@@ -333,18 +342,22 @@ async function makeOverlay(part) {
   const br = new BrollLayer(P.broll, (id) => urls[id]);
   await br.load();
   const front = { hook: !behind.hook, caps: !behind.caps, list: !behind.list };
+  const gl = new GfxLayer(P.gfx, (id) => urls[id], 'assets/healthquest-logo.png');
+  await gl.load();
+  const mirrored = (ft) => P.effects.some((e) => ft >= e.start && ft < e.start + e.dur);
   const fn = (ctx, t, src, running = false) => {
     const ft = t + off;
-    if (br.coversFull(ft)) { br.draw(ctx, ft, running); drawText(ctx, T, t, undefined, part); return; }
-    if (anyBehind && src && !segmenterFailed()) {
+    if (br.coversFull(ft)) { br.draw(ctx, ft, running); drawText(ctx, T, t, undefined, part); }
+    else if (anyBehind && src && !mirrored(ft) && !segmenterFailed()) {
       drawText(ctx, T, t, behind, part);
       drawPerson(ctx, src);
       br.draw(ctx, ft, running);
       drawText(ctx, T, t, front, part);
-      return;
+    } else {
+      br.draw(ctx, ft, running);
+      drawText(ctx, T, t, undefined, part);
     }
-    br.draw(ctx, ft, running);
-    drawText(ctx, T, t, undefined, part);
+    gl.draw(ctx, ft);
   };
   fn.prepare = (t) => br.prepare(t + off);
   fn.pause = () => br.pauseAll();
@@ -352,38 +365,46 @@ async function makeOverlay(part) {
 }
 
 let playing = null;
-$('#playClean').onclick = async () => {
-  if (playing) { playing.stop = true; preview.pause(); if (previewTrack) previewTrack.pauseAll(); playing = null; $('#playClean').textContent = '▶ Play'; return; }
+function stopPlaying() { if (playing) { playing.stop = true; preview.pause(); if (previewTrack) previewTrack.pauseAll(); playing = null; $('#playClean').textContent = '▶ Play'; } }
+$('#playClean').onclick = () => (playing ? stopPlaying() : play(0));
+// Plays the kept parts with everything on top, from startT for up to maxDur seconds.
+async function play(startT = 0, maxDur = Infinity) {
+  stopPlaying();
   if (!P.takes.length) return;
   stopCamera();
   const ranges = fullRanges();
   const ov = await makeOverlay(0);
+  const comp = makeComp(0, ranges);
   const track = VO() && P.visuals.length ? await getTrack() : null;
   const run = { stop: false }; playing = run; $('#playClean').textContent = '■ Stop';
   $('#emptyPreview').classList.add('hidden'); cv.classList.remove('hidden');
   let doneT = 0;
-  for (const r of ranges) {
-    if (run.stop) break;
+  const endT = startT + maxDur;
+  for (const [k, r] of ranges.entries()) {
+    const len = r.end - r.start;
+    if (doneT + len <= startT) { doneT += len; continue; }
+    if (run.stop || doneT >= endT) break;
     await loadSrc(urls[P.takes[r.take].id]);
-    await seekTo(r.start);
+    await seekTo(r.start + Math.max(0, startT - doneT));
     await preview.play();
     await new Promise((res) => {
       const chk = () => {
-        const t = doneT + Math.max(0, preview.currentTime - r.start);
-        cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
-        if (track) track.draw(cx, t, true); else drawCover(cx, preview);
+        const local = Math.max(0, preview.currentTime - r.start), t = doneT + local;
+        comp.frame(cx, (c) => (track ? track.draw(c, t, true) : drawCover(c, preview)), t, k, local);
         ov(cx, t, track ? null : preview, true);
-        (run.stop || preview.currentTime >= r.end - 0.02 || preview.ended) ? res() : requestAnimationFrame(chk);
+        (run.stop || t >= endT || preview.currentTime >= r.end - 0.02 || preview.ended) ? res() : requestAnimationFrame(chk);
       };
       chk();
     });
     if (track) track.pauseAll();
     ov.pause();
-    doneT += r.end - r.start;
+    doneT += len;
   }
   preview.pause(); if (track) track.pauseAll(); ov.pause();
   if (playing === run) { playing = null; $('#playClean').textContent = '▶ Play'; }
-};
+}
+const makeComp = (part, ranges, still = false) =>
+  new Compositor(P.effects, P.trans, ranges, part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0, !VO() && !still);
 
 // ---------- Step 3: Clean ----------
 let worker = null;
@@ -548,9 +569,9 @@ function edit() {
   if (P.scrub > len) P.scrub = 0;
   panel.innerHTML = `
     <h1>Edit</h1>
-    <div class="tabs">${[['text', 'Text'], ['broll', 'B-roll'], ['trans', 'Transitions'], ['gfx', 'Graphics']].map(([k, n]) =>
-      `<button class="tab ${editTab === k ? 'on' : ''}" data-tab="${k}">${n}${k === 'trans' || k === 'gfx' ? ' <span class="soon">(soon)</span>' : ''}</button>`).join('')}</div>
-    ${editTab === 'broll' ? brollHTML(len) : editTab !== 'text' ? `<p class="sub" style="margin-top:20px">Coming in the next updates: ${editTab === 'trans' ? 'cut, crossfade, swipes, zoom, flash and whip pan.' : 'arrows, circles, underlines, ✓ / ✗ stamps, sparkles, your logo and your own PNGs.'}</p>` : `
+    <div class="tabs">${[['text', 'Text'], ['broll', 'B-roll'], ['trans', 'Transitions & mirror'], ['gfx', 'Graphics & stamps']].map(([k, n]) =>
+      `<button class="tab ${editTab === k ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
+    ${editTab === 'broll' ? brollHTML(len) : editTab === 'trans' ? transHTML(len) : editTab === 'gfx' ? gfxHTML(len) : `
     <div class="scrub">
       <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
       <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
@@ -607,6 +628,8 @@ function edit() {
   $('#go5').onclick = () => go(5);
   document.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { editTab = b.dataset.tab; render(); }));
   if (editTab === 'broll') { brollBind(); return; }
+  if (editTab === 'trans') { transBind(); return; }
+  if (editTab === 'gfx') { gfxBind(); return; }
   if (editTab !== 'text') return;
 
   $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
@@ -746,6 +769,123 @@ function brollBind() {
   }));
 }
 
+// ---------- shared bits for timed items ----------
+const newId = (p) => p + Date.now() + Math.random().toString(36).slice(2, 6);
+function scrubBlock(len, hint) {
+  return `<div class="scrub">
+      <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
+      <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
+      ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
+}
+function bindScrub() {
+  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
+  $('#scrub').onchange = () => { save(); render(); };
+}
+const timeRow = (arr, i, x) => `
+  <label class="inline">Starts at <input type="number" class="num" min="0" step="0.1" value="${x.start}" data-k="${arr}.${i}.start" data-type="num"> sec</label>
+  <button class="chip" data-now="${arr}.${i}">Use ${fmt(P.scrub)} sec</button>
+  <label class="inline">for <input type="number" class="num" min="0.2" step="0.1" value="${x.dur}" data-k="${arr}.${i}.dur" data-type="num"> sec</label>
+  <button class="chip" data-see="${x.start}">▶ See it</button>`;
+function bindTimed() {
+  document.querySelectorAll('[data-now]').forEach((b) => (b.onclick = () => { remember(); setPath(b.dataset.now + '.start', +P.scrub.toFixed(2)); save(); render(); }));
+  document.querySelectorAll('[data-see]').forEach((b) => (b.onclick = () => play(Math.max(0, +b.dataset.see - 0.6), 2.6)));
+}
+
+// ---------- Transitions & mirror tab ----------
+function transHTML(len) {
+  const ranges = fullRanges();
+  const tr = P.trans;
+  let acc = 0;
+  const joins = ranges.map((r) => { const at = acc; acc += r.end - r.start; return { r, at }; }).slice(1);
+  return `${scrubBlock(len)}
+  <div class="card">
+    <div class="card-h"><b class="big-l">Transitions between cuts</b><span class="sub">${joins.length} cuts</span></div>
+    ${VO() ? `<div class="note">Voice-over reels: transitions go between on-camera cuts, so they're off here. Mirror effects below still work.</div>` : `
+    <p class="hint">Every place Clean cut something is a cut. Pick one look for all of them, then change any single cut below. Transitions don't add time: they play over the start of the next bit.</p>
+    <label>For every cut</label>
+    <div class="row">${Object.entries(TRANSITIONS).map(([k, n]) => `<button class="chip ${tr.def === k ? 'on' : ''}" data-set="trans.def" data-val="${k}">${n}</button>`).join('')}</div>
+    <label>Length <b data-show="trans.dur">${tr.dur}</b> sec</label>
+    <input type="range" min="0.1" max="0.8" step="0.05" value="${tr.dur}" data-k="trans.dur" data-type="num" data-live>
+    ${joins.length ? `<details class="more" ${joins.length <= 6 ? 'open' : ''}><summary>Change a single cut (${joins.length})</summary>
+      ${joins.map(({ r, at }) => `<div class="row joinrow"><b>${fmt(at)} sec</b>
+        <select data-join="${joinKey(r)}"><option value="">Same as all (${TRANSITIONS[tr.def]})</option>${Object.entries(TRANSITIONS).map(([k, n]) => `<option value="${k}" ${(tr.joins || {})[joinKey(r)] === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        <button class="chip" data-see="${at}">▶ See it</button></div>`).join('')}</details>` : '<p class="sub">No cuts yet. Run Clean first.</p>'}`}
+  </div>
+  <div class="card">
+    <div class="card-h"><b class="big-l">Mirror effects</b></div>
+    <p class="hint">Mirror or repeat your image for a beat (or the whole reel). Text, B-roll and graphics stay on top, not mirrored.</p>
+    <div class="row">${Object.entries(MIRRORS).map(([k, n]) => `<button class="chip" data-addfx="${k}">＋ ${n}</button>`).join('')}</div>
+    ${P.effects.map((e, i) => `<div class="card inner">
+      <div class="card-h"><select data-k="effects.${i}.kind" data-type="str">${Object.entries(MIRRORS).map(([k, n]) => `<option value="${k}" ${e.kind === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        <span><button class="chip" data-fxall="${i}">Whole reel</button><button class="x" data-fxdel="${i}" title="Remove">✕</button></span></div>
+      <div class="row">${timeRow('effects', i, e)}</div></div>`).join('') || ''}
+  </div>`;
+}
+function transBind() {
+  bindScrub(); bindInputs(); bindTimed();
+  document.querySelectorAll('[data-join]').forEach((sel) => (sel.onchange = () => {
+    remember(); P.trans.joins = P.trans.joins || {};
+    if (sel.value) P.trans.joins[sel.dataset.join] = sel.value; else delete P.trans.joins[sel.dataset.join];
+    save(); repaint();
+  }));
+  document.querySelectorAll('[data-addfx]').forEach((b) => (b.onclick = () => {
+    remember(); P.effects.push({ id: newId('e'), kind: b.dataset.addfx, start: +P.scrub.toFixed(2), dur: 2 }); save(); render();
+  }));
+  document.querySelectorAll('[data-fxall]').forEach((b) => (b.onclick = () => { remember(); Object.assign(P.effects[+b.dataset.fxall], { start: 0, dur: +reelLen().toFixed(2) + 1 }); save(); render(); }));
+  document.querySelectorAll('[data-fxdel]').forEach((b) => (b.onclick = () => { remember(); P.effects.splice(+b.dataset.fxdel, 1); save(); render(); }));
+}
+
+// ---------- Graphics & stamps tab ----------
+const GANIM = { pop: 'Pop in', slam: 'Stamp slam', draw: 'Draw on', fade: 'Fade in', none: 'None' };
+const gIcon = { stampCheck: '✅', stampX: '❌', check: '✔', cross: '✖', arrow: '➜', circle: '◯', underline: '﹏', sparkle: '✨', star: '💥', emoji: '😀', logo: '🟢', png: '🖼' };
+function gfxHTML(len) {
+  return `${scrubBlock(len, 'Move the slider to the moment, tap a graphic to add it there, then drag it on the preview.')}
+  <div class="gpal">${Object.entries(GFX).filter(([k]) => k !== 'png').map(([k, n]) => `<button class="gbtn" data-gadd="${k}"><span>${gIcon[k]}</span>${n}</button>`).join('')}
+    <label class="gbtn" style="cursor:pointer"><span>🖼</span>Upload PNG<input type="file" id="gpng" accept="image/png,image/*" hidden></label></div>
+  <h3 style="margin-top:20px">In this reel (${P.gfx.length})</h3>
+  ${P.gfx.map((g, i) => {
+    const sel = moveWhat === 'g:' + g.id;
+    return `<div class="card">
+    <div class="card-h"><button class="namebtn" data-gsel="${g.id}">${sel ? '▾' : '▸'} ${gIcon[g.type]} ${GFX[g.type]}${g.text ? ` "${esc(g.text)}"` : ''} <span class="sub">${fmt(g.start)}–${fmt(g.start + g.dur)} sec</span></button>
+      <span><button class="x" data-gdup="${i}" title="Duplicate">⧉</button><button class="x" data-gdel="${i}" title="Remove">✕</button></span></div>
+    ${!sel ? '' : `<div class="row">${timeRow('gfx', i, g)}</div>
+      ${['stampCheck', 'stampX', 'star'].includes(g.type) ? `<label class="inline">Word on it (optional) <input type="text" class="short" data-k="gfx.${i}.text" data-type="str" data-live value="${esc(g.text)}" placeholder="${g.type === 'stampX' ? 'MYTH' : g.type === 'stampCheck' ? 'FACT' : 'NEW!'}"></label>` : ''}
+      ${g.type === 'emoji' ? `<label class="inline">Emoji <input type="text" class="short" data-k="gfx.${i}.text" data-type="str" data-live value="${esc(g.text)}" placeholder="🔥"></label>` : ''}
+      <div class="row"><label class="inline">Animation <select data-k="gfx.${i}.anim" data-type="str">${Object.entries(GANIM).map(([k, n]) => `<option value="${k}" ${g.anim === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+      <label>Size <b data-show="gfx.${i}.size">${Math.round(g.size * 100)}</b>%</label>
+      <input type="range" min="0.08" max="0.9" step="0.01" value="${g.size}" data-k="gfx.${i}.size" data-type="num" data-live data-pct>
+      <label>Rotate <b data-show="gfx.${i}.rot">${g.rot}</b>°</label>
+      <input type="range" min="-180" max="180" step="1" value="${g.rot}" data-k="gfx.${i}.rot" data-type="num" data-live>
+      ${['logo', 'png', 'emoji'].includes(g.type) ? '' : `<label>Color</label>${swatches(`gfx.${i}.color`, g.color)}`}`}
+  </div>`;
+  }).join('') || '<p class="sub">No graphics yet.</p>'}`;
+}
+function gfxBind() {
+  bindScrub(); bindInputs(); bindTimed();
+  document.querySelectorAll('[data-gadd]').forEach((b) => (b.onclick = () => {
+    remember();
+    const g = newGfx(newId('g'), b.dataset.gadd, P.scrub, b.dataset.gadd === 'emoji' ? { text: '🔥' } : {});
+    P.gfx.push(g); moveWhat = 'g:' + g.id; P.scrub = Math.min(P.scrub + 0.5, reelLen() - 0.05); save(); render();
+  }));
+  $('#gpng').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const id = newId('g'); await store.put('blob:' + id, f); urls[id] = URL.createObjectURL(f);
+    remember(); P.gfx.push(newGfx(id, 'png', P.scrub, { name: f.name })); moveWhat = 'g:' + id; save(); render();
+  };
+  document.querySelectorAll('[data-gsel]').forEach((b) => (b.onclick = () => {
+    const id = b.dataset.gsel; const g = P.gfx.find((x) => x.id === id);
+    moveWhat = moveWhat === 'g:' + id ? '' : 'g:' + id;
+    if (moveWhat) P.scrub = Math.min(g.start + Math.min(0.5, g.dur / 2), reelLen() - 0.05);
+    render();
+  }));
+  document.querySelectorAll('[data-gdel]').forEach((b) => (b.onclick = () => { remember(); P.gfx.splice(+b.dataset.gdel, 1); save(); render(); }));
+  document.querySelectorAll('[data-gdup]').forEach((b) => (b.onclick = () => {
+    const g = P.gfx[+b.dataset.gdup]; const id = newId('g');
+    if (g.type === 'png') { urls[id] = urls[g.id]; store.get('blob:' + g.id).then((bl) => store.put('blob:' + id, bl)); }
+    remember(); P.gfx.push({ ...g, id, start: +(g.start + g.dur).toFixed(2) }); moveWhat = 'g:' + id; save(); render();
+  }));
+}
+
 // ---------- B-roll library ----------
 let libCat = 'All', libSearch = '', libOpen = true, libEditing = null;
 function libraryHTML() {
@@ -839,15 +979,17 @@ function dragTo(e) {
   const r = cv.getBoundingClientRect();
   const x = Math.min(0.95, Math.max(0.05, (e.clientX - r.left) / r.width));
   const y = Math.min(0.95, Math.max(0.05, (e.clientY - r.top) / r.height));
-  const target = moveWhat.startsWith('b:') ? P.broll.find((b) => 'b:' + b.id === moveWhat) : P.text[moveWhat];
+  const target = moveWhat.startsWith('b:') ? P.broll.find((b) => 'b:' + b.id === moveWhat)
+    : moveWhat.startsWith('g:') ? P.gfx.find((g) => 'g:' + g.id === moveWhat) : P.text[moveWhat];
   if (!target) return;
   target.x = Math.abs(x - 0.5) < 0.04 ? 0.5 : x; // snap to center
   target.y = y;
   repaint();
 }
 cv.addEventListener('pointerdown', (e) => {
-  if (P.step !== 4 || (editTab !== 'text' && editTab !== 'broll')) return;
-  if (editTab === 'text' && moveWhat.startsWith('b:')) moveWhat = 'caps';
+  if (P.step !== 4 || editTab === 'trans') return;
+  if (editTab === 'gfx' && !moveWhat.startsWith('g:')) return;
+  if (editTab === 'text' && /^[bg]:/.test(moveWhat)) moveWhat = 'caps';
   if (editTab === 'broll' && !moveWhat.startsWith('b:')) return;
   remember(); dragging = true; cv.setPointerCapture(e.pointerId); dragTo(e);
 });
@@ -892,7 +1034,7 @@ async function doExport(part) {
   document.querySelectorAll('[data-exp]').forEach((b) => (b.disabled = true));
   setStatus('Exporting… this plays through once, so it takes about as long as the reel.', 0);
   try {
-    const opts = { overlay: await makeOverlay(part) };
+    const opts = { overlay: await makeOverlay(part), comp: makeComp(part, ranges) };
     if (VO() && P.visuals.length) {
       opts.track = makeTrack();
       opts.offset = part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0;
@@ -926,8 +1068,10 @@ async function buildCovers() {
     let c;
     if (!track) c = await frameAt(urls[P.takes[p.take].id], p.t);
     else { c = document.createElement('canvas'); c.width = W; c.height = H; await track.still(c.getContext('2d'), p.out ?? 0); }
-    await ov.prepare(p.out ?? 0); ov(c.getContext('2d'), p.out ?? 0, null);
-    return c;
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    makeComp(0, fullRanges(), true).frame(out.getContext('2d'), (x) => x.drawImage(c, 0, 0), p.out ?? 0, 0, 1);
+    await ov.prepare(p.out ?? 0); ov(out.getContext('2d'), p.out ?? 0, null);
+    return out;
   };
   coverCanvasFn = coverCanvas;
   box.innerHTML = '';
@@ -983,6 +1127,12 @@ function post() {
       if (bl) urls[b.id] = URL.createObjectURL(bl);
     }
     P.broll = P.broll.filter((b) => urls[b.id]);
+    for (const g of P.gfx.filter((x) => x.type === 'png')) {
+      if (urls[g.id]) continue;
+      const bl = await store.get('blob:' + g.id);
+      if (bl) urls[g.id] = URL.createObjectURL(bl);
+    }
+    P.trans = { def: 'cut', dur: 0.3, joins: {}, ...P.trans };
     presets = (await store.get('presets')) || [];
     await L.loadLibrary();
   } catch (e) { console.warn(e); }

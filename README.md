@@ -48,9 +48,18 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - Tap a tile to drop it into the reel at the slider's second.
 - Saved in this browser only, like everything else.
 
+## Build 4: Transitions, mirror effects, graphics and stamps
+
+**Edit → Transitions & mirror**
+- One look for every cut: hard cut, crossfade, swipe left/right/up, zoom in, flash, whip pan. Length slider (default 0.3 sec). Change any single cut, with "See it" to preview. Transitions don't add time.
+- Mirror effects for any stretch (or the whole reel): mirror split left/right or top/bottom, repeat grid 2×2 or 3×3, side-by-side clones, kaleidoscope. Text, B-roll and graphics stay on top.
+
+**Edit → Graphics & stamps**
+- ✓ / ✗ stamps (rubber-stamp look, optional word like FACT or MYTH, "stamp slam" animation), check, cross, arrow, circle and underline (draw on), sparkles, star burst (optional word), any emoji, the HealthQuest logo, your own PNGs.
+- Start time, length, size, rotation, brand colors, animation. Drag on the preview to place. Duplicate or remove.
+
 ## Coming next (in this order)
 
-3. **Transitions and graphics:** cut, crossfade, swipes, zoom, flash, whip pan; arrows, circles, underlines, ✓ / ✗ stamps, sparkles, logo, my own PNGs.
 4. **Post cards:** per-platform caption, time, rules, posted checkboxes.
 5. **Calendar:** month/week plan, import my content calendar.
 
@@ -65,6 +74,8 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - `js/export.js`: MP4 export and cover frames
 - `js/text.js`: hook, captions, list drawing and styles
 - `js/segment.js`: text behind me
+- `js/fx.js`: mirror effects, transitions, graphics and stamps
+- `assets/healthquest-logo.png`: logo for the graphics tab
 - `js/library.js`: B-roll library and categories
 - `js/broll.js`: B-roll and frames
 - `js/visuals.js`: voice-over visuals timeline
