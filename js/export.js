@@ -93,7 +93,7 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
         paint(true);
         onProgress(Math.min(1, (done + Math.max(0, v.currentTime - r.start)) / totalLen));
         if (v.currentTime >= r.end - 0.01 || v.ended) { v.pause(); res(); return; }
-        if (v.requestVideoFrameCallback && !track) v.requestVideoFrameCallback(tick);
+        if (v.requestVideoFrameCallback && !track && v.videoWidth) v.requestVideoFrameCallback(tick); // sound-only clips have no frames
         else requestAnimationFrame(tick);
       };
       tick();

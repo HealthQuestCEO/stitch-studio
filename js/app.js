@@ -356,7 +356,9 @@ function record() {
     </details>
     <h3 style="margin-top:26px">${VO() ? 'Voice takes' : 'Takes'} (${P.takes.length})</h3>
     <ul class="takes">${P.takes.map((t, i) => `<li><b>Take ${i + 1}</b><span>${fmt(t.duration)} sec</span>
-      <button class="btn" data-play="${i}">▶</button><button class="x" data-del="${i}" title="Remove this take">✕</button></li>`).join('') || '<li>No takes yet.</li>'}</ul>
+      <button class="btn" data-play="${i}">▶</button>
+      <button class="x" data-tup="${i}" title="Move earlier" ${i === 0 ? 'disabled' : ''}>↑</button><button class="x" data-tdn="${i}" title="Move later" ${i === P.takes.length - 1 ? 'disabled' : ''}>↓</button>
+      <button class="x" data-del="${i}" title="Remove this take">✕</button></li>`).join('') || '<li>No takes yet.</li>'}</ul>
     ${VO() ? `<h3 style="margin-top:26px">What plays on screen (${P.visuals.length}) ${tip('Photos, clips or screen recordings. They play in this order. Leave seconds blank to share the time evenly.')}</h3>
       <label class="btn" style="display:inline-block;margin:0">＋ Add photos, clips or screen recordings
         <input type="file" id="addVis" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
@@ -392,6 +394,8 @@ function record() {
     toast(`Removed. Undo to bring Take ${+b.dataset.del + 1} back.`);
     void t;
   }));
+  document.querySelectorAll('[data-tup]').forEach((b) => (b.onclick = () => moveTake(+b.dataset.tup, -1)));
+  document.querySelectorAll('[data-tdn]').forEach((b) => (b.onclick = () => moveTake(+b.dataset.tdn, 1)));
   document.querySelectorAll('[data-play]').forEach((b) => (b.onclick = () => {
     stopCamera(); const t = P.takes[+b.dataset.play];
     preview.classList.remove('mirror'); preview.srcObject = null; preview.muted = false;
@@ -456,6 +460,23 @@ function startPrompter() {
   scrollRAF = requestAnimationFrame(step);
 }
 function stopPrompter() { cancelAnimationFrame(scrollRAF); $('#prompter').classList.add('hidden'); }
+
+// Swap two takes and keep the cleanup, split and per-cut transitions pointing at the right take.
+function moveTake(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= P.takes.length) return;
+  remember();
+  [P.takes[i], P.takes[j]] = [P.takes[j], P.takes[i]];
+  const sw = (t) => (t === i ? j : t === j ? i : t);
+  for (const it of P.items) it.take = sw(it.take);
+  P.items.sort((a, b) => a.take - b.take || a.start - b.start);
+  if (P.split) P.split = { ...P.split, take: sw(P.split.take) };
+  const joins = {};
+  for (const [k, v] of Object.entries(P.trans.joins || {})) { const [t, st] = k.split(':'); joins[`${sw(+t)}:${st}`] = v; }
+  P.trans.joins = joins;
+  save(); render();
+  toast(`Moved. Take ${j + 1} is now "${P.takes[j].name}". B-roll, mirror and graphics stay at the same seconds, so check them in Edit.`, 5000);
+}
 
 async function addTake(blob, name) {
   let duration = 0, audioId = null;
