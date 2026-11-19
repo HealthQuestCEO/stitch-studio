@@ -58,10 +58,21 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - ✓ / ✗ stamps (rubber-stamp look, optional word like FACT or MYTH, "stamp slam" animation), check, cross, arrow, circle and underline (draw on), sparkles, star burst (optional word), any emoji, the HealthQuest logo, your own PNGs.
 - Start time, length, size, rotation, brand colors, animation. Drag on the preview to place. Duplicate or remove.
 
-## Coming next (in this order)
+## Build 5: Post cards
 
-4. **Post cards:** per-platform caption, time, rules, posted checkboxes.
-5. **Calendar:** month/week plan, import my content calendar.
+- Pick the posting date. Write your caption once, pick a closer, set the YouTube title.
+- One card per platform (Instagram, Facebook Page, Facebook personal, TikTok, YouTube Shorts) with its post time, its rules, a ready caption and a Copy button:
+  - Instagram: "Link in bio", 5 hashtags, sign-off, reminder to add @healthquestapp as Collaborator.
+  - Facebook Page and personal: the full clickable link, sign-off.
+  - TikTok: shorter caption, no sign-off.
+  - YouTube Shorts: title and short description, #Shorts, no sign-off.
+- Through Dec 31 every caption carries the tester line (Facebook gets the sign-up link). After that it drops off by itself.
+- Edit any card's caption by hand (Reset brings the template back). Tick Posted on each; when all five are ticked the reel is marked Posted.
+- Settings (apply to every reel): post times for Tue/Wed/Thu, Facebook personal time, links, tester line and end date, sign-off, closers, hashtags.
+
+## Coming next
+
+6. **Calendar:** month/week plan, import my content calendar.
 
 ## Files
 
@@ -74,6 +85,7 @@ Everything runs in Chrome on my laptop. Videos, takes and edits are saved in thi
 - `js/export.js`: MP4 export and cover frames
 - `js/text.js`: hook, captions, list drawing and styles
 - `js/segment.js`: text behind me
+- `js/post.js`: post cards, caption templates, post times
 - `js/fx.js`: mirror effects, transitions, graphics and stamps
 - `assets/healthquest-logo.png`: logo for the graphics tab
 - `js/library.js`: B-roll library and categories
