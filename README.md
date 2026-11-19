@@ -114,3 +114,8 @@ Nothing left on the build list. Next: whatever comes up from real reels.
 - `js/broll.js`: B-roll and frames
 - `js/visuals.js`: voice-over visuals timeline
 - `js/store.js`: autosave
+
+## Photo / carousel posts
+Plan → pick **🖼 Photo or carousel** (or open an ad day on the calendar and tap **Start this post**).
+Record step becomes **Photos**: add pictures from your phone (JPEG/PNG; set iPhone Camera → Formats → Most Compatible if HEIC won't open), reorder ↑↓, type text per slide (`*stars*` = highlight), pick 4:5, 1:1 or 9:16.
+Slide 1 carries your hook. Edit adds stamps, B-roll images and your logo per slide. Export downloads one PNG, or a zip of every slide in order.

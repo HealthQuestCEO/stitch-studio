@@ -10,7 +10,7 @@ export const PLATFORMS = [
 ];
 
 export const RULES = {
-  ig: ['Links don\'t click here, so it ends with "Link in bio."', 'About 5 hashtags.', 'Add @healthquestapp as a Collaborator before you share.'],
+  ig: ['Links don\'t click here, so it ends with "Link in bio."', 'About 5 hashtags.'],
   fbPage: ['Links are clickable, so the full link is in the caption.'],
   fbMe: ['Links are clickable, so the full link is in the caption.', 'Post at 6:00 pm on reel days.'],
   tt: ['Shorter caption.', 'No sign-off line.'],
@@ -37,6 +37,10 @@ export function defaultSettings() {
       "I'm April, a pediatric nurse practitioner, mom, and the creator of HealthQuest.",
     ],
     hashtags: '#PediatricNursePractitioner #FounderStory #HealthQuest #HealthDecoder',
+    collab: '@healthquestapp',            // Instagram Collab partner
+    igTag: '@eau103psu',                  // personal Instagram to tag
+    fbTag: 'April Uy',                    // personal Facebook to tag
+    fbTagLink: 'https://www.facebook.com/april.uy.37',
   };
 }
 
@@ -80,4 +84,15 @@ export function nextReelDay(from = new Date()) {
     d.setDate(d.getDate() + 1);
   }
   return d.toISOString().slice(0, 10);
+}
+
+// Rules plus the collab/tag steps for each platform, from your settings.
+export function rulesFor(key, S) {
+  const r = [...RULES[key]];
+  if (key === 'ig') {
+    if (S.collab) r.push(`Before you share: Tag people → Invite collaborator → ${S.collab}.`);
+    if (S.igTag) r.push(`Tag people → ${S.igTag}.`);
+  }
+  if (key === 'fbPage' && S.fbTag) r.push(`Tag ${S.fbTag} (type @${S.fbTag.split(' ')[0]} in the post), then share it to your personal profile.`);
+  return r;
 }
