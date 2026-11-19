@@ -6,6 +6,7 @@ export const STATUSES = ['To record', 'Recorded', 'Edited', 'Ready', 'Scheduled'
 export function typeClass(type = '') {
   const t = type.toLowerCase();
   if (t.includes('reddit')) return 'reddit';
+  if (t.startsWith('ad post') || t.includes('meta ad') || t.includes('(meta)')) return 'ad';
   if (t.includes('ad') || t.includes('story') || t.includes('stories') || t.includes('flyer')) return t.includes('reel') ? 'reel' : 'ad';
   return 'reel';
 }
