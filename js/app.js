@@ -7,7 +7,7 @@ import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
 import * as L from './library.js';
 import { STATUSES, typeClass, isReel, bracketCount, readXlsx, parseCsv, rowsToEntries, mergeImport, partWarnings } from './calendar.js';
-import { PLATFORMS, RULES, defaultSettings, fmtTime, timesFor, buildCaptions, nextReelDay } from './post.js';
+import { PLATFORMS, RULES, rulesFor, defaultSettings, fmtTime, timesFor, buildCaptions, nextReelDay } from './post.js';
 import { Compositor, MIRRORS, TRANSITIONS, GFX, GfxLayer, newGfx, joinKey } from './fx.js';
 import { VisualTrack } from './visuals.js';
 
@@ -1548,7 +1548,7 @@ function post() {
       const t = tm[pl.time];
       return `<div class="pcard ${P.posted[pl.key] ? 'done' : ''}">
         <div class="card-h"><b>${pl.icon} ${pl.name}</b><span class="ptime">⏰ ${fmtTime(t)}</span></div>
-        <ul class="rules">${RULES[pl.key].map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
+        <ul class="rules">${rulesFor(pl.key, S).map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
         ${pl.key === 'yt' ? `<div class="yttitle"><b>Title:</b> ${esc(P.ytTitle || caps.ytTitle)} <button class="chip" data-copytxt="${esc(P.ytTitle || caps.ytTitle)}">Copy title</button></div>` : ''}
         <textarea class="ptext" data-pcap="${pl.key}">${esc(txt)}</textarea>
         <div class="row"><button class="big pcopy" data-copy="${pl.key}">Copy caption</button>
@@ -1570,6 +1570,9 @@ function post() {
       <label>Sign-off (Instagram and Facebook only)</label><input type="text" data-st="signoff" value="${esc(S.signoff)}">
       <label>Closers (one per line)</label><textarea data-st="closers">${esc(S.closers.join('\n'))}</textarea>
       <label>Hashtags (Instagram and TikTok use the first 5, Facebook and YouTube the first 3)</label><input type="text" data-st="hashtags" value="${esc(S.hashtags)}">
+      <label>Instagram Collab partner</label><input type="text" data-st="collab" value="${esc(S.collab || '')}" placeholder="@healthquestapp">
+      <label>Personal Instagram to tag</label><input type="text" data-st="igTag" value="${esc(S.igTag || '')}" placeholder="@yourname">
+      <label>Personal Facebook to tag</label><input type="text" data-st="fbTag" value="${esc(S.fbTag || '')}" placeholder="Your name on Facebook">
     </details>
     <div class="next"><button class="btn" id="back5">← Export</button><span class="sub">Status: <b>${P.status}</b></span></div>`;
 
