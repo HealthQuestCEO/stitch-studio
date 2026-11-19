@@ -2,10 +2,11 @@ import * as store from './store.js';
 import { decodeClip, to16kMono, speechRuns, captureAudio } from './audio.js';
 import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit, outWords } from './clean.js';
 import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
-import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
+import { drawText, drawWords, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
 import * as L from './library.js';
+import { ASPECTS, cropRect, loadImages, drawSlide, cropTo, makeZip } from './photo.js';
 import { STATUSES, typeClass, isReel, bracketCount, readXlsx, parseCsv, rowsToEntries, mergeImport, partWarnings } from './calendar.js';
 import { PLATFORMS, RULES, rulesFor, defaultSettings, fmtTime, timesFor, buildCaptions, nextReelDay } from './post.js';
 import { Compositor, MIRRORS, TRANSITIONS, GFX, GfxLayer, newGfx, joinKey } from './fx.js';
@@ -39,16 +40,18 @@ const blank = () => ({
   effects: [],          // mirror effects {id, kind, start, dur}
   trans: { def: 'cut', dur: 0.3, joins: {} },
   gfx: [],              // graphics and stamps
+  slides: [], aspect: '4:5', // photo / carousel posts
   splits: [],           // reel times where you split the video into sections
   postDate: '', caption: '', closer: 0, ytTitle: '', posted: {}, capEdits: {}, status: 'To record',
   scrub: 0,
 });
 const VO = () => P.mode === 'voiceover';
+const PHOTO = () => P.mode === 'photo';
 let P = blank();
 const urls = {};        // take id -> object URL
 let undoStack = [], redoStack = [];
 
-const snap = () => JSON.stringify({ splits: P.splits, items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, text: P.text, broll: P.broll, effects: P.effects, trans: P.trans, gfx: P.gfx });
+const snap = () => JSON.stringify({ splits: P.splits, items: P.items, split: P.split, pauseSec: P.pauseSec, takes: P.takes, cleaned: P.cleaned, transcript: P.transcript, visuals: P.visuals, mode: P.mode, slides: P.slides, aspect: P.aspect, text: P.text, broll: P.broll, effects: P.effects, trans: P.trans, gfx: P.gfx });
 function remember() { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncUndo(); }
 function restore(s) { Object.assign(P, JSON.parse(s)); save(); render(); }
 $('#undo').onclick = () => { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); syncUndo(); };
@@ -86,7 +89,7 @@ const fmt = (s) => (Math.round(s * 10) / 10).toFixed(1);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const tip = (t) => `<span class="tip" title="${esc(t)}">?</span>`;
 const rawLen = () => P.takes.reduce((s, t) => s + t.duration, 0);
-const cleanLen = () => (P.cleaned ? total(keptRanges(P.items, P.takes)) : rawLen());
+const cleanLen = () => (PHOTO() ? P.slides.length : P.cleaned ? total(keptRanges(P.items, P.takes)) : rawLen());
 
 function setTimer(sec) {
   $('#timerNum').textContent = fmt(sec);
@@ -103,9 +106,14 @@ function go(n) { if (P.step === 2 && n !== 2) stopCamera(); P.step = n; save(); 
 
 function render() {
   renderSteps();
-  ({ 1: plan, 2: record, 3: clean, 4: edit, 5: exportStep, 6: post })[P.step]();
-  if (P.step !== 2) repaint(); else if (!cam) { cv.classList.add('hidden'); }
+  (PHOTO() ? { 1: plan, 2: photoRecord, 3: photoClean, 4: edit, 5: photoExport, 6: post } : { 1: plan, 2: record, 3: clean, 4: edit, 5: exportStep, 6: post })[P.step]();
+  if (P.step !== 2 || PHOTO()) repaint(); else if (!cam) { cv.classList.add('hidden'); }
   setTimer(cleanLen());
+  if (PHOTO()) { $('#timerNum').textContent = P.slides.length; $('#timer').classList.remove('over'); $('#timer small').textContent = P.slides.length === 1 ? ' slide' : ' slides'; }
+  else $('#timer small').textContent = ' sec';
+  const g = $('#cropGuide'), r = cropRect(P.aspect);
+  g.classList.toggle('hidden', !PHOTO() || P.aspect === '9:16');
+  g.style.setProperty('--band', `${(100 * r.y) / H}%`);
 }
 
 // ---------- Start over ----------
@@ -127,7 +135,7 @@ document.querySelectorAll('[data-over]').forEach((b) => (b.onclick = async () =>
     save(); render(); toast('Edits cleared. Undo brings them back.');
   } else if (kind === 'reel') {
     if (!confirm('Delete every take and edit for this reel? This can\'t be undone.')) return;
-    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
+    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx, ...P.slides]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
     const keep = { id: P.id, calId: P.calId, title: P.title, hook: P.hook, script: P.script, postDate: P.postDate, mode: P.mode, caption: P.caption, closer: P.closer, ytTitle: P.ytTitle };
     P = Object.assign(blank(), keep, { step: 2, status: 'To record' });
     undoStack = []; redoStack = []; syncUndo(); previewTrack = null; preview.removeAttribute('src');
@@ -204,7 +212,8 @@ function entryHTML(e, warn) {
     <textarea data-ef="script">${esc(e.script)}</textarea>
     ${e.where || e.times ? `<p class="hint"><b>Where:</b> ${esc(e.where)}${e.times ? ` · <b>Times:</b> ${esc(e.times)}` : ''}</p>` : ''}
     ${e.notes ? `<p class="hint"><b>Notes:</b> ${esc(e.notes)}</p>` : ''}
-    ${isReel(e) ? `<div class="row">${reel ? `<button class="big" id="evOpen">Open this reel →</button><span class="sub">${esc(reel.status)}</span>` : `<button class="big" id="evStart">Start this reel →</button>`}</div>` : ''}
+    ${isReel(e) ? `<div class="row">${reel ? `<button class="big" id="evOpen">Open this reel →</button><span class="sub">${esc(reel.status)}</span>` : `<button class="big" id="evStart">Start this reel →</button>`}</div>`
+      : typeClass(e.type) === 'ad' ? `<div class="row">${reel ? `<button class="big" id="evOpen">Open this post →</button><span class="sub">${esc(reel.status)}</span>` : `<button class="big" id="evStartPhoto">Start this post (photo or carousel) →</button>`}</div>` : ''}
   </div>`;
 }
 
@@ -225,6 +234,7 @@ function plan() {
     <div class="modes">
       <button class="mode ${!VO() ? 'on' : ''}" data-mode="camera"><b>🎥 Me on camera</b><span>You talk to the camera.</span></button>
       <button class="mode ${VO() ? 'on' : ''}" data-mode="voiceover"><b>🎙 Voice-over</b><span>You talk; photos, clips or screen recordings play on screen.</span></button>
+      <button class="mode ${PHOTO() ? 'on' : ''}" data-mode="photo"><b>🖼 Photo or carousel</b><span>Pictures with text, stamps and your logo. For a post, a carousel or an ad.</span></button>
     </div>
     <label>Reel name ${tip('Just for you, so you can find it later.')}</label>
     <input type="text" id="title" placeholder="e.g. The moment at NASPGHAN" value="${esc(P.title)}">
@@ -248,7 +258,7 @@ function plan() {
     const r = reelIndex[b.dataset.delreel];
     if (!confirm(`Delete "${r.title}" and its recordings? This can't be undone.`)) return;
     const old = await store.get('reel:' + r.id);
-    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || [])]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
+    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || []), ...(old.slides || [])]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
     await store.del('reel:' + r.id); delete reelIndex[r.id]; await store.put('reelIndex', reelIndex);
     const ce = CAL.entries.find((x) => x.reelId === r.id); if (ce) { ce.reelId = null; await saveCal(); }
     render();
@@ -323,6 +333,10 @@ function calendarBind() {
     sel.reelId = P.id; await saveCal(); go(2);
   };
   if ($('#evOpen')) $('#evOpen').onclick = () => openReel(sel.reelId, 2);
+  if ($('#evStartPhoto')) $('#evStartPhoto').onclick = async () => {
+    await newReel({ title: sel.topic, hook: '', script: '', postDate: sel.date, calId: sel.id, mode: 'photo' }, true);
+    sel.reelId = P.id; await saveCal(); go(2);
+  };
 }
 
 // ---------- reels ----------
@@ -336,7 +350,7 @@ function hydrate(saved) {
   return p;
 }
 async function loadUrls() {
-  for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx.filter((x) => x.type === 'png')]) {
+  for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.slides, ...P.gfx.filter((x) => x.type === 'png')]) {
     if (urls[t.id]) continue;
     const b = await store.get('blob:' + t.id);
     if (b) urls[t.id] = URL.createObjectURL(b);
@@ -578,6 +592,12 @@ async function stillAt(t) {
   if (stillBusy) { stillAgain = t; return; }
   stillBusy = true;
   try {
+    if (PHOTO()) {
+      if (!P.slides.length) { cv.classList.add('hidden'); $('#emptyPreview').classList.remove('hidden'); return; }
+      $('#emptyPreview').classList.add('hidden'); cv.classList.remove('hidden');
+      await paintSlide(cx, Math.floor(t));
+      return;
+    }
     const ranges = fullRanges();
     if (!P.takes.length || !ranges.length) { cv.classList.add('hidden'); $('#emptyPreview').classList.remove('hidden'); return; }
     $('#emptyPreview').classList.add('hidden'); cv.classList.remove('hidden');
@@ -610,8 +630,9 @@ function repaint() { cancelAnimationFrame(paintRAF); paintRAF = requestAnimation
 async function makeOverlay(part) {
   const T = JSON.parse(JSON.stringify(P.text));
   if (!T.hook.text) T.hook.text = P.hook;
+  if (PHOTO()) T.hook.dur = 1; // the hook sits on slide 1
   const ranges = P.cleaned ? keptRanges(P.items, P.takes, part ? P.split : null, part) : fullRanges();
-  T.caps.chunks = P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges), T.caps.n) : null;
+  T.caps.chunks = !PHOTO() && P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges), T.caps.n) : null;
   await Promise.all([ready(T.hook.style), ready(T.caps.style), ready(T.list.style)]);
   const behind = { hook: T.hook.on && T.hook.behind, caps: T.caps.on && T.caps.behind, list: T.list.on && T.list.behind };
   const anyBehind = !VO() && (behind.hook || behind.caps || behind.list);
@@ -639,6 +660,10 @@ async function makeOverlay(part) {
       br.draw(ctx, ft, running);
       drawText(ctx, T, t, undefined, part);
     }
+    if (PHOTO()) { // text you typed for this slide
+      const sl = P.slides[Math.floor(t)];
+      if (sl && sl.text) drawWords(ctx, T.caps.style, sl.text.split(/\s+/).filter(Boolean).map((w) => ({ text: w.replace(/^\*|\*$/g, ''), hl: /^\*.*\*$/.test(w) })), W * T.caps.x, H * T.caps.y);
+    }
     gl.draw(ctx, ft);
     if (logoImg && logoImg.naturalWidth) { // the logo on every reel
       const w = W * LG.size, h = (w * logoImg.naturalHeight) / logoImg.naturalWidth, m = W * 0.04;
@@ -654,7 +679,7 @@ async function makeOverlay(part) {
 
 let playing = null;
 function stopPlaying() { if (playing) { playing.stop = true; preview.pause(); if (previewTrack) previewTrack.pauseAll(); playing = null; $('#playClean').textContent = '▶ Play'; } }
-$('#playClean').onclick = () => (playing ? stopPlaying() : play(0));
+$('#playClean').onclick = () => (PHOTO() ? toast('Photo posts have no playback. Use the slider in Edit to see each slide.') : playing ? stopPlaying() : play(0));
 // Plays the kept parts with everything on top, from startT for up to maxDur seconds.
 async function play(startT = 0, maxDur = Infinity) {
   stopPlaying();
@@ -693,6 +718,102 @@ async function play(startT = 0, maxDur = Infinity) {
 }
 const makeComp = (part, ranges, still = false) =>
   new Compositor(P.effects, P.trans, ranges, part === 2 ? total(keptRanges(P.items, P.takes, P.split, 1)) : 0, !VO() && !still);
+
+// ---------- Photo / carousel ----------
+let slideImgs = {}, slideKey = '';
+async function getSlideImgs() {
+  const key = P.slides.map((x) => x.id).join(',');
+  if (key !== slideKey) { slideImgs = await loadImages(P.slides, (id) => urls[id]); slideKey = key; }
+  return slideImgs;
+}
+// Draw slide i with everything on top, into ctx (1080x1920 working frame).
+async function paintSlide(ctx, i) {
+  const t = i + 0.6; // animations have settled by now
+  const imgs = await getSlideImgs();
+  const ov = await makeOverlay(0);
+  await ov.prepare(t);
+  drawSlide(ctx, P.slides, imgs, t, P.aspect);
+  ov(ctx, t, null);
+}
+function photoRecord() {
+  panel.innerHTML = `
+    <h1>Photos</h1>
+    <p class="sub">Add one picture for a single post or ad, or several for a carousel. Each picture is one slide.</p>
+    <label class="big" style="cursor:pointer">⬆ Add photos from your phone or computer<input type="file" id="addSlides" accept="image/*,.heic,.HEIC" multiple hidden></label>
+    <label>Size</label>
+    <div class="row">${Object.entries(ASPECTS).map(([k, a]) => `<button class="chip ${P.aspect === k ? 'on' : ''}" data-aspect="${k}">${a.name}</button>`).join('')}</div>
+    <p class="hint">Feed posts, carousels and feed ads: 4:5. Stories: 9:16.</p>
+    <h3 style="margin-top:22px">Slides (${P.slides.length})</h3>
+    <ul class="takes vis">${P.slides.map((x, i) => `<li><img src="${urls[x.id]}"><b>${i + 1}</b>
+      <input type="text" class="short" style="flex:1" data-stext="${i}" value="${esc(x.text || '')}" placeholder="${i === 0 ? 'Slide 1 uses your hook; add more text here if you want' : 'Text on this slide (optional, *stars* = highlight)'}">
+      <button class="x" data-sup="${i}" ${i === 0 ? 'disabled' : ''}>↑</button><button class="x" data-sdn="${i}" ${i === P.slides.length - 1 ? 'disabled' : ''}>↓</button>
+      <button class="x" data-sdel="${i}" title="Remove">✕</button></li>`).join('') || '<li>No photos yet.</li>'}</ul>
+    <div class="next"><span></span><button class="big" id="goEdit" ${P.slides.length ? '' : 'disabled'}>Next: Edit →</button></div>`;
+  $('#addSlides').onchange = async (e) => {
+    let bad = 0;
+    for (const f of e.target.files) {
+      try { const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); } catch { bad++; continue; }
+      const id = 's' + Date.now() + Math.random().toString(36).slice(2, 6);
+      await store.put('blob:' + id, f); urls[id] = URL.createObjectURL(f);
+      remember(); P.slides.push({ id, name: f.name, text: '' });
+    }
+    if (bad) toast(`${bad} photo${bad > 1 ? 's' : ''} wouldn't open (iPhone HEIC photos often don't in Chrome). On your iPhone: Settings → Camera → Formats → Most Compatible, or export them from Photos as JPEG.`, 9000);
+    if (P.status === 'To record' && P.slides.length) P.status = 'Recorded';
+    save(); render();
+  };
+  document.querySelectorAll('[data-aspect]').forEach((b) => (b.onclick = () => { remember(); P.aspect = b.dataset.aspect; save(); render(); }));
+  document.querySelectorAll('[data-stext]').forEach((el) => {
+    el.onfocus = () => { P.scrub = +el.dataset.stext; repaint(); };
+    el.oninput = () => { P.slides[+el.dataset.stext].text = el.value; save(); repaint(); };
+  });
+  const mv = (i, d) => { const j = i + d; if (j < 0 || j >= P.slides.length) return; remember(); [P.slides[i], P.slides[j]] = [P.slides[j], P.slides[i]]; save(); render(); };
+  document.querySelectorAll('[data-sup]').forEach((b) => (b.onclick = () => mv(+b.dataset.sup, -1)));
+  document.querySelectorAll('[data-sdn]').forEach((b) => (b.onclick = () => mv(+b.dataset.sdn, 1)));
+  document.querySelectorAll('[data-sdel]').forEach((b) => (b.onclick = () => { remember(); P.slides.splice(+b.dataset.sdel, 1); P.scrub = 0; save(); render(); }));
+  $('#goEdit').onclick = () => go(4);
+}
+function photoClean() {
+  panel.innerHTML = `<h1>Clean</h1><p class="sub">Photos don't need cleanup. Go straight to Edit to add text, stamps and your logo.</p>
+    <div class="next"><button class="btn" id="b2">← Photos</button><button class="big" id="g4">Next: Edit →</button></div>`;
+  $('#b2').onclick = () => go(2); $('#g4').onclick = () => go(4);
+}
+function photoExport() {
+  const a = ASPECTS[P.aspect];
+  panel.innerHTML = `
+    <h1>Export</h1>
+    <p class="sub">${P.slides.length > 1 ? `Your carousel: ${P.slides.length} slides` : 'Your post'} at ${a.w}×${a.h}, with your text, graphics and logo on each slide.</p>
+    ${!P.slides.length ? '<div class="note bad">Add a photo first.</div>' : `
+    <div class="row"><button class="big" id="expAll">⬇ Download ${P.slides.length > 1 ? 'all slides (zip)' : 'the picture'}</button></div>
+    <div class="cover-strip" id="slideThumbs"><span class="sub">Making previews…</span></div>
+    <p class="hint">Tap a slide to download just that one. Upload them in this order for a carousel. For an ad, use the 4:5 size.</p>`}
+    <div class="next"><button class="btn" id="b4">← Edit</button><button class="big" id="g6">Next: Post →</button></div>`;
+  $('#b4').onclick = () => go(4); $('#g6').onclick = () => go(6);
+  if (!P.slides.length) return;
+  const base = (P.title || 'post').replace(/[^\w\- ]+/g, '').trim() || 'post';
+  const render1 = async (i) => { const c = document.createElement('canvas'); c.width = W; c.height = H; await paintSlide(c.getContext('2d'), i); return cropTo(c, P.aspect); };
+  const dl = (blob, name) => { const x = document.createElement('a'); x.href = URL.createObjectURL(blob); x.download = name; x.click(); };
+  const toBlob = (c) => new Promise((r) => c.toBlob(r, 'image/png'));
+  (async () => {
+    const box = $('#slideThumbs'); box.innerHTML = '';
+    for (let i = 0; i < P.slides.length; i++) {
+      const c = await render1(i);
+      const img = new Image(); img.src = c.toDataURL('image/jpeg', 0.7); img.title = `Download slide ${i + 1}`;
+      img.style.aspectRatio = `${a.w}/${a.h}`;
+      img.onclick = async () => dl(await toBlob(await render1(i)), `${base} - slide ${i + 1}.png`);
+      if (!$('#slideThumbs')) return; box.appendChild(img);
+    }
+  })();
+  $('#expAll').onclick = async () => {
+    $('#expAll').disabled = true;
+    const files = [];
+    for (let i = 0; i < P.slides.length; i++) files.push({ name: `${base} - slide ${i + 1}.png`, blob: await toBlob(await render1(i)) });
+    if (files.length === 1) dl(files[0].blob, files[0].name);
+    else dl(await makeZip(files), `${base} - carousel.zip`);
+    window.__lastExport = { count: files.length };
+    if (P.status !== 'Posted') { P.status = 'Edited'; save(); }
+    $('#expAll').disabled = false; toast('Saved to your Downloads.');
+  };
+}
 
 // ---------- Step 3: Clean ----------
 let worker = null;
@@ -814,7 +935,7 @@ let editTab = 'text', moveWhat = 'caps', tapMode = 'hl', presets = [];
 const openBoxes = new Set(['hook', 'caps']);
 const getPath = (path) => path.split('.').reduce((o, k) => o[k], P);
 function setPath(path, val) { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], P)[last] = val; }
-const reelLen = () => total(fullRanges());
+const reelLen = () => (PHOTO() ? P.slides.length : total(fullRanges()));
 
 function swatches(path, cur) {
   return `<div class="row sw">${BRAND.map((b) => `<button class="swatch ${cur.toLowerCase() === b.c.toLowerCase() ? 'on' : ''}" style="background:${b.c}" title="${b.name}" data-set="${path}" data-val="${b.c}"></button>`).join('')}
@@ -850,7 +971,8 @@ const sampleText = () => (P.text.hook.text || P.hook || 'Your words here').split
 const ANIMS = { karaoke: 'Karaoke (word lights up)', word: 'Word by word', pop: 'Pop in', bounce: 'Bounce', fade: 'Fade in', none: 'None' };
 
 function edit() {
-  if (!P.takes.length) { panel.innerHTML = '<h1>Edit</h1><p class="sub">Record a take first.</p>'; return; }
+  if (!P.takes.length && !(PHOTO() && P.slides.length)) { panel.innerHTML = `<h1>Edit</h1><p class="sub">${PHOTO() ? 'Add a photo first.' : 'Record a take first.'}</p>`; return; }
+  if (PHOTO() && (editTab === 'trans')) editTab = 'text';
   loadAllFonts();
   const T = P.text;
   const words = P.cleaned && P.transcript ? outWords(P.items, P.takes, fullRanges()) : [];
@@ -858,13 +980,13 @@ function edit() {
   if (P.scrub > len) P.scrub = 0;
   panel.innerHTML = `
     <h1>Edit</h1>
-    <div class="tabs">${[['text', 'Text'], ['broll', 'B-roll'], ['trans', 'Transitions & mirror'], ['gfx', 'Graphics & stamps']].map(([k, n]) =>
+    <div class="tabs">${[['text', 'Text'], ['broll', 'B-roll'], ['trans', 'Transitions & mirror'], ['gfx', 'Graphics & stamps']].filter(([k]) => !(PHOTO() && k === 'trans')).map(([k, n]) =>
       `<button class="tab ${editTab === k ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
     ${splitBarHTML(len)}
     ${editTab === 'broll' ? brollHTML(len) : editTab === 'trans' ? transHTML(len) : editTab === 'gfx' ? gfxHTML(len) : `
     <div class="scrub">
-      <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
-      <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
+      <label>${PHOTO() ? 'Slide' : 'See the frame at'} <b id="scrubV">${PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub)}</b>${PHOTO() ? '' : ' sec'}</label>
+      <input type="range" id="scrub" min="0" max="${PHOTO() ? Math.max(0, len - 1) : Math.max(0.1, len - 0.05).toFixed(2)}" step="${PHOTO() ? 1 : 0.05}" value="${P.scrub}">
       <div class="row small">Drag on the preview to move:
         ${[['hook', 'Hook'], ['caps', 'Captions'], ['list', 'List']].map(([k, n]) => `<button class="chip ${moveWhat === k ? 'on' : ''}" data-move="${k}">${n}</button>`).join('')}</div>
     </div>
@@ -917,13 +1039,13 @@ function edit() {
   $('#back3').onclick = () => go(3);
   $('#go5').onclick = () => go(5);
   document.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { editTab = b.dataset.tab; render(); }));
-  splitBind(len);
+  if (!PHOTO()) splitBind(len);
   if (editTab === 'broll') { brollBind(); return; }
   if (editTab === 'trans') { transBind(); return; }
   if (editTab === 'gfx') { gfxBind(); return; }
   if (editTab !== 'text') return;
 
-  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
+  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub); repaint(); };
   $('#scrub').onchange = () => save();
   document.querySelectorAll('[data-move]').forEach((b) => (b.onclick = () => { moveWhat = b.dataset.move; render(); }));
   document.querySelectorAll('[data-tap]').forEach((b) => (b.onclick = () => { tapMode = b.dataset.tap; render(); }));
@@ -983,8 +1105,8 @@ function brollHTML(len) {
   const b = (i) => P.broll[i];
   return `
     <div class="scrub">
-      <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
-      <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
+      <label>${PHOTO() ? 'Slide' : 'See the frame at'} <b id="scrubV">${PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub)}</b>${PHOTO() ? '' : ' sec'}</label>
+      <input type="range" id="scrub" min="0" max="${PHOTO() ? Math.max(0, len - 1) : Math.max(0.1, len - 0.05).toFixed(2)}" step="${PHOTO() ? 1 : 0.05}" value="${P.scrub}">
       <p class="hint">Move the slider to where a photo or clip should start, then add it. Your voice keeps playing; clip sound is muted.</p>
     </div>
     <label class="big gold" style="display:inline-block;cursor:pointer">＋ Add photo or clip at ${fmt(P.scrub)} sec
@@ -1022,7 +1144,7 @@ function brollHTML(len) {
     </div>`).join('') || '<p class="sub" style="margin-top:16px">No B-roll yet.</p>'}`;
 }
 function brollBind() {
-  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
+  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub); repaint(); };
   $('#scrub').onchange = () => { save(); render(); };
   $('#addBroll').onchange = async (e) => {
     let at = P.scrub;
@@ -1031,6 +1153,7 @@ function brollBind() {
       await store.put('blob:' + id, f); urls[id] = URL.createObjectURL(f);
       remember();
       const item = newBroll(id, f.type.startsWith('image/') ? 'image' : 'video', f.name, at);
+      if (PHOTO()) { item.start = Math.floor(at); item.dur = 1; }
       P.broll.push(item); moveWhat = 'b:' + id; at += item.dur;
     }
     P.broll.sort((a, b) => a.start - b.start); P.scrub = Math.min(P.scrub + 0.3, reelLen() - 0.05);
@@ -1068,6 +1191,7 @@ const sectionsOf = (len) => {
   return edges.slice(0, -1).map((a, i) => ({ a, b: edges[i + 1] }));
 };
 function splitBarHTML(len) {
+  if (PHOTO()) return '';
   const secs = sectionsOf(len);
   if (secSel >= secs.length) secSel = -1;
   const pct = (t) => (100 * t) / Math.max(len, 0.01);
@@ -1173,12 +1297,12 @@ function splitBind(len) {
 const newId = (p) => p + Date.now() + Math.random().toString(36).slice(2, 6);
 function scrubBlock(len, hint) {
   return `<div class="scrub">
-      <label>See the frame at <b id="scrubV">${fmt(P.scrub)}</b> sec</label>
-      <input type="range" id="scrub" min="0" max="${Math.max(0.1, len - 0.05).toFixed(2)}" step="0.05" value="${P.scrub}">
+      <label>${PHOTO() ? 'Slide' : 'See the frame at'} <b id="scrubV">${PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub)}</b>${PHOTO() ? '' : ' sec'}</label>
+      <input type="range" id="scrub" min="0" max="${PHOTO() ? Math.max(0, len - 1) : Math.max(0.1, len - 0.05).toFixed(2)}" step="${PHOTO() ? 1 : 0.05}" value="${P.scrub}">
       ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
 }
 function bindScrub() {
-  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = fmt(P.scrub); repaint(); };
+  $('#scrub').oninput = (e) => { P.scrub = +e.target.value; $('#scrubV').textContent = PHOTO() ? Math.floor(P.scrub) + 1 : fmt(P.scrub); repaint(); };
   $('#scrub').onchange = () => { save(); render(); };
 }
 const timeRow = (arr, i, x) => `
@@ -1283,7 +1407,8 @@ function gfxBind() {
   document.querySelectorAll('[data-gadd]').forEach((b) => (b.onclick = () => {
     remember();
     const g = newGfx(newId('g'), b.dataset.gadd, P.scrub, b.dataset.gadd === 'emoji' ? { text: '🔥' } : {});
-    P.gfx.push(g); moveWhat = 'g:' + g.id; P.scrub = Math.min(P.scrub + 0.5, reelLen() - 0.05); save(); render();
+    if (PHOTO()) { g.start = Math.floor(P.scrub); g.dur = 1; }
+    P.gfx.push(g); moveWhat = 'g:' + g.id; if (!PHOTO()) P.scrub = Math.min(P.scrub + 0.5, reelLen() - 0.05); save(); render();
   }));
   $('#gpng').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;

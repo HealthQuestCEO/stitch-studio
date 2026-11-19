@@ -228,3 +228,6 @@ mark{background:#ffe066;border-radius:3px;padding:0 2px}
 .over:hover{border-color:var(--teal);background:#effaf7}
 .over.danger b{color:var(--red)}
 .over.danger:hover{border-color:var(--red);background:#fdecec}
+
+/* photo posts */
+.cropguide{position:absolute;inset:0;pointer-events:none;z-index:2;background:linear-gradient(rgba(0,0,0,.55) var(--band),transparent var(--band),transparent calc(100% - var(--band)),rgba(0,0,0,.55) calc(100% - var(--band)))}
