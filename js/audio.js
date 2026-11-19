@@ -65,3 +65,29 @@ export function speechRuns(samples, rate = 16000) {
   }
   return merged;
 }
+
+// Some phone videos (.mov) won't decode directly in Chrome. Plan B: play the clip once
+// (muted to you) and record its sound. Takes as long as the clip. Returns {audio, duration}.
+export async function captureAudio(blob, onProgress = () => {}) {
+  const url = URL.createObjectURL(blob);
+  const v = document.createElement('video');
+  v.src = url; v.playsInline = true; v.preload = 'auto';
+  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('Chrome can\'t open this video')); });
+  if (!isFinite(v.duration) || v.duration <= 0) throw new Error('Chrome can\'t tell how long this video is');
+  const ac = new AudioContext(); await ac.resume();
+  const dest = ac.createMediaStreamDestination();
+  ac.createMediaElementSource(v).connect(dest); // not connected to speakers, so you don't hear it
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((m) => MediaRecorder.isTypeSupported(m));
+  const rec = new MediaRecorder(dest.stream, mime ? { mimeType: mime } : undefined);
+  const chunks = [];
+  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  const stopped = new Promise((r) => (rec.onstop = r));
+  rec.start(250);
+  await v.play();
+  await new Promise((res) => {
+    const tick = () => { onProgress(v.currentTime / v.duration); if (v.ended || v.currentTime >= v.duration - 0.03) res(); else requestAnimationFrame(tick); };
+    v.onended = res; tick();
+  });
+  rec.stop(); await stopped; ac.close(); URL.revokeObjectURL(url);
+  return { audio: new Blob(chunks, { type: (mime || 'audio/webm').split(';')[0] }), duration: v.duration };
+}

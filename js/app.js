@@ -1,5 +1,5 @@
 import * as store from './store.js';
-import { decodeClip, to16kMono, speechRuns } from './audio.js';
+import { decodeClip, to16kMono, speechRuns, captureAudio } from './audio.js';
 import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit, outWords } from './clean.js';
 import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
 import { drawText, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
@@ -107,6 +107,34 @@ function render() {
   if (P.step !== 2) repaint(); else if (!cam) { cv.classList.add('hidden'); }
   setTimer(cleanLen());
 }
+
+// ---------- Start over ----------
+$('#startOver').onclick = () => $('#overModal').classList.remove('hidden');
+$('#overCancel').onclick = () => $('#overModal').classList.add('hidden');
+$('#overModal').onclick = (e) => { if (e.target.id === 'overModal') $('#overModal').classList.add('hidden'); };
+document.querySelectorAll('[data-over]').forEach((b) => (b.onclick = async () => {
+  const kind = b.dataset.over;
+  $('#overModal').classList.add('hidden');
+  stopPlaying(); stopCamera();
+  if (kind === 'clean') {
+    if (!P.takes.length) { toast('Record a take first.'); return; }
+    remember(); P.cleaned = false; P.items = []; P.split = null; P.step = 3; save(); render(); runClean();
+  } else if (kind === 'edits') {
+    remember();
+    const keepHook = P.text.hook.text;
+    P.text = defaultText(); P.text.hook.text = keepHook;
+    P.broll = []; P.effects = []; P.gfx = []; P.splits = []; P.trans = { def: 'cut', dur: 0.3, joins: {} };
+    save(); render(); toast('Edits cleared. Undo brings them back.');
+  } else if (kind === 'reel') {
+    if (!confirm('Delete every take and edit for this reel? This can\'t be undone.')) return;
+    for (const t of [...P.takes, ...P.visuals, ...P.broll, ...P.gfx]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
+    const keep = { id: P.id, calId: P.calId, title: P.title, hook: P.hook, script: P.script, postDate: P.postDate, mode: P.mode, caption: P.caption, closer: P.closer, ytTitle: P.ytTitle };
+    P = Object.assign(blank(), keep, { step: 2, status: 'To record' });
+    undoStack = []; redoStack = []; syncUndo(); previewTrack = null; preview.removeAttribute('src');
+    const ce = CAL.entries.find((x) => x.id === P.calId); if (ce) { ce.status = 'To record'; await saveCal(); }
+    save(); render(); toast('Fresh start. Your hook and script are still here.');
+  }
+}));
 
 // ---------- Step 1: Plan ----------
 let CAL = { entries: [] }, reelIndex = {};
@@ -220,7 +248,7 @@ function plan() {
     const r = reelIndex[b.dataset.delreel];
     if (!confirm(`Delete "${r.title}" and its recordings? This can't be undone.`)) return;
     const old = await store.get('reel:' + r.id);
-    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || [])]) await store.del('blob:' + t.id);
+    if (old) for (const t of [...old.takes, ...old.visuals, ...old.broll, ...(old.gfx || [])]) { await store.del('blob:' + t.id); if (t.audioId) await store.del('blob:' + t.audioId); }
     await store.del('reel:' + r.id); delete reelIndex[r.id]; await store.put('reelIndex', reelIndex);
     const ce = CAL.entries.find((x) => x.reelId === r.id); if (ce) { ce.reelId = null; await saveCal(); }
     render();
@@ -347,7 +375,7 @@ function record() {
     <div class="row">
       <button class="big" id="camBtn">${cam ? '● Start recording' : VO() ? 'Turn on mic' : 'Turn on camera'}</button>
       <label class="btn" style="margin:22px 0 0">⬆ Upload ${VO() ? 'voice (audio or video)' : 'from phone'}
-        <input type="file" id="upload" accept="${VO() ? 'audio/*,video/*' : 'video/*'}" multiple hidden></label>
+        <input type="file" id="upload" accept="${VO() ? 'audio/*,video/*,.mov,.m4a' : 'video/*,.mov,.MOV,.mp4'}" multiple hidden></label>
     </div>
     <details class="more"><summary>More options</summary>
       <label><input type="checkbox" id="pOn" ${P.prompter ? 'checked' : ''}> Scroll my script while I record</label>
@@ -356,10 +384,12 @@ function record() {
     </details>
     <h3 style="margin-top:26px">${VO() ? 'Voice takes' : 'Takes'} (${P.takes.length})</h3>
     <ul class="takes">${P.takes.map((t, i) => `<li><b>Take ${i + 1}</b><span>${fmt(t.duration)} sec</span>
-      <button class="btn" data-play="${i}">▶</button><button class="x" data-del="${i}" title="Remove this take">✕</button></li>`).join('') || '<li>No takes yet.</li>'}</ul>
+      <button class="btn" data-play="${i}">▶</button>
+      <button class="x" data-tup="${i}" title="Move earlier" ${i === 0 ? 'disabled' : ''}>↑</button><button class="x" data-tdn="${i}" title="Move later" ${i === P.takes.length - 1 ? 'disabled' : ''}>↓</button>
+      <button class="x" data-del="${i}" title="Remove this take">✕</button></li>`).join('') || '<li>No takes yet.</li>'}</ul>
     ${VO() ? `<h3 style="margin-top:26px">What plays on screen (${P.visuals.length}) ${tip('Photos, clips or screen recordings. They play in this order. Leave seconds blank to share the time evenly.')}</h3>
       <label class="btn" style="display:inline-block;margin:0">＋ Add photos, clips or screen recordings
-        <input type="file" id="addVis" accept="image/*,video/*" multiple hidden></label>
+        <input type="file" id="addVis" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
       <ul class="takes vis">${P.visuals.map((v, i) => `<li>${v.kind === 'image' ? `<img src="${urls[v.id]}">` : `<video src="${urls[v.id]}#t=0.5" muted></video>`}
         <b>${esc(v.name)}</b>
         <input type="number" min="0.5" step="0.5" placeholder="auto" value="${v.sec || ''}" data-sec="${i}" title="Seconds on screen (blank = auto)"> sec
@@ -392,6 +422,8 @@ function record() {
     toast(`Removed. Undo to bring Take ${+b.dataset.del + 1} back.`);
     void t;
   }));
+  document.querySelectorAll('[data-tup]').forEach((b) => (b.onclick = () => moveTake(+b.dataset.tup, -1)));
+  document.querySelectorAll('[data-tdn]').forEach((b) => (b.onclick = () => moveTake(+b.dataset.tdn, 1)));
   document.querySelectorAll('[data-play]').forEach((b) => (b.onclick = () => {
     stopCamera(); const t = P.takes[+b.dataset.play];
     preview.classList.remove('mirror'); preview.srcObject = null; preview.muted = false;
@@ -457,15 +489,45 @@ function startPrompter() {
 }
 function stopPrompter() { cancelAnimationFrame(scrollRAF); $('#prompter').classList.add('hidden'); }
 
+// Swap two takes and keep the cleanup, split and per-cut transitions pointing at the right take.
+function moveTake(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= P.takes.length) return;
+  remember();
+  [P.takes[i], P.takes[j]] = [P.takes[j], P.takes[i]];
+  const sw = (t) => (t === i ? j : t === j ? i : t);
+  for (const it of P.items) it.take = sw(it.take);
+  P.items.sort((a, b) => a.take - b.take || a.start - b.start);
+  if (P.split) P.split = { ...P.split, take: sw(P.split.take) };
+  const joins = {};
+  for (const [k, v] of Object.entries(P.trans.joins || {})) { const [t, st] = k.split(':'); joins[`${sw(+t)}:${st}`] = v; }
+  P.trans.joins = joins;
+  save(); render();
+  toast(`Moved. Take ${j + 1} is now "${P.takes[j].name}". B-roll, mirror and graphics stay at the same seconds, so check them in Edit.`, 5000);
+}
+
 async function addTake(blob, name) {
-  let duration = 0;
-  try { duration = (await decodeClip(blob)).duration; }
-  catch { toast(`Couldn't read the sound in ${name}. Try exporting it from your phone as MP4.`); return; }
+  let duration = 0, audioId = null;
   const id = 't' + Date.now() + Math.random().toString(36).slice(2, 6);
+  try { if (window.__FORCE_CAPTURE) throw new Error('test'); duration = (await decodeClip(blob)).duration; }
+  catch {
+    // Plan B for phone videos Chrome can't read directly: play it once and record the sound.
+    try {
+      toast(`Getting the sound out of ${name}. This plays it once (silently), so it takes as long as the clip…`, 600000);
+      const { audio, duration: d } = await captureAudio(blob, (p) => { $('#toast').textContent = `Getting the sound out of ${name}… ${Math.round(p * 100)}%`; });
+      await decodeClip(audio);
+      audioId = id + 'a'; duration = d;
+      await store.put('blob:' + audioId, audio);
+      toast(`Got it. ${name} is ready.`);
+    } catch (err) {
+      toast(`Chrome can't open ${name} (${err.message}). On your Mac: open it in QuickTime, choose File → Export As → 1080p, and upload that copy. Or set your iPhone to Settings → Camera → Formats → Most Compatible.`, 15000);
+      return;
+    }
+  }
   await store.put('blob:' + id, blob);
   urls[id] = URL.createObjectURL(blob);
   remember();
-  P.takes.push({ id, name, duration });
+  P.takes.push(audioId ? { id, name, duration, audioId } : { id, name, duration });
   if (P.status === 'To record') P.status = 'Recorded';
   P.cleaned = false; P.items = []; P.split = null;
   save();
@@ -661,7 +723,7 @@ async function runClean() {
   for (let i = 0; i < P.takes.length; i++) {
     const tk = P.takes[i];
     setStatus(`Take ${i + 1} of ${P.takes.length}: finding pauses…`, i / P.takes.length);
-    const blob = await store.get('blob:' + tk.id);
+    const blob = await store.get('blob:' + (tk.audioId || tk.id));
     const samples = await to16kMono(await decodeClip(blob));
     const runs = speechRuns(samples);
     setStatus(`Take ${i + 1} of ${P.takes.length}: getting the transcript…`);
@@ -926,7 +988,7 @@ function brollHTML(len) {
       <p class="hint">Move the slider to where a photo or clip should start, then add it. Your voice keeps playing; clip sound is muted.</p>
     </div>
     <label class="big gold" style="display:inline-block;cursor:pointer">＋ Add photo or clip at ${fmt(P.scrub)} sec
-      <input type="file" id="addBroll" accept="image/*,video/*" multiple hidden></label>
+      <input type="file" id="addBroll" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
     ${libraryHTML()}
     <h3 style="margin-top:22px">In this reel (${P.broll.length})</h3>
     ${P.broll.map((x, i) => `
@@ -1026,7 +1088,7 @@ function splitBarHTML(len) {
       <b>Section ${secSel + 1}: ${fmt(sel.a)}–${fmt(sel.b)} sec (${fmt(sel.b - sel.a)} sec)</b>
       <div class="row">
         <select id="secMirror"><option value="">🪞 Mirror this section…</option>${Object.entries(MIRRORS).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>
-        <label class="btn" style="margin:0;cursor:pointer">🖼 Cover with B-roll<input type="file" id="secBroll" accept="image/*,video/*" hidden></label>
+        <label class="btn" style="margin:0;cursor:pointer">🖼 Cover with B-roll<input type="file" id="secBroll" accept="image/*,video/*,.mov,.MOV,.heic" hidden></label>
         <button class="btn" id="secLib">📚 B-roll from library</button>
         <button class="btn" id="secPlay">▶ Play section</button>
         <button class="btn danger" id="secDel">🗑 Remove section</button>
@@ -1255,7 +1317,7 @@ function libraryHTML() {
   <details class="card lib" id="libBox" ${libOpen ? 'open' : ''}>
     <summary><b>📚 B-roll library</b> <span class="sub">${lib.items.length} saved · kept for every reel</span></summary>
     <div class="row" style="margin-top:10px">
-      <label class="btn" style="margin:0;cursor:pointer">⬆ Add to library<input type="file" id="libUp" accept="image/*,video/*" multiple hidden></label>
+      <label class="btn" style="margin:0;cursor:pointer">⬆ Add to library<input type="file" id="libUp" accept="image/*,video/*,.mov,.MOV,.heic" multiple hidden></label>
       <label class="inline" style="margin-top:0">into <select id="libUpCat">${lib.cats.map((c) => `<option ${c === upCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">＋ New category…</option></select></label>
       <input type="text" id="libSearch" class="short" placeholder="Search by name" value="${esc(libSearch)}">
     </div>
@@ -1469,6 +1531,11 @@ function post() {
     </div>
     ${tester ? `<div class="note">Tester line is on until ${new Date(S.testerEnd + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. After that it drops off by itself.</div>` : ''}
     <label>Your caption</label>
+    <div class="row" style="margin:-2px 0 8px">
+      <button class="chip" id="capSaid" ${P.cleaned && P.transcript ? '' : 'disabled title="Needs the transcript from Clean"'}>✨ Fill from what I said</button>
+      <button class="chip" id="capScript" ${P.script.trim() ? '' : 'disabled title="No script on this reel"'}>📝 Fill from my script</button>
+      ${calNote() ? `<span class="hint" style="margin:0">Calendar note: ${esc(calNote())}</span>` : ''}
+    </div>
     <textarea id="pcap" placeholder="What happened, in your words. A short story, then why it matters. Hashtags and links get added for you.">${esc(P.caption)}</textarea>
     <div class="row">
       <label class="inline">Closer <select id="pcloser"><option value="-1">None</option>${closers.map((c, i) => `<option value="${i}" ${+P.closer === i ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
@@ -1509,6 +1576,14 @@ function post() {
   $('#back5').onclick = () => go(5);
   $('#pdate').onchange = (e) => { P.postDate = e.target.value; save(); render(); };
   let capTimer;
+  const fillCap = (txt) => {
+    if (!txt) return;
+    if (P.caption.trim() && !confirm('Replace the caption you already have?')) return;
+    P.caption = txt; save(); render();
+    if (/\[[^\]]+\]/.test(txt)) toast('Your caption still has [brackets]. Fill them in before you copy it.', 5000);
+  };
+  if ($('#capSaid')) $('#capSaid').onclick = () => fillCap(captionFromSpeech());
+  if ($('#capScript')) $('#capScript').onclick = () => fillCap(captionFromScript());
   $('#pcap').oninput = (e) => { P.caption = e.target.value; save(); clearTimeout(capTimer); capTimer = setTimeout(refreshCaps, 300); };
   $('#pcloser').onchange = (e) => { P.closer = +e.target.value; save(); render(); };
   $('#ptitle').oninput = (e) => { P.ytTitle = e.target.value; save(); };
@@ -1535,6 +1610,26 @@ function post() {
     await saveSettings(); render();
   }));
 }
+// Caption drafts from her own words: what she said (after Clean) or her script. No AI, no rewriting.
+const FILLER = /^(um+|uh+|erm|hmm+|like,?|you know,?)$/i;
+function sentences(txt) { return (txt.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+["')]*|[^.!?]+$/g) || []).map((x) => x.trim()).filter(Boolean); }
+function tidy(arr, max) {
+  const out = []; let n = 0;
+  for (const x of arr) { const w = x.split(' ').length; if (out.length && n + w > max) break; out.push(x[0].toUpperCase() + x.slice(1)); n += w; }
+  return out.join(' ');
+}
+function captionFromSpeech() {
+  const words = outWords(P.items, P.takes, fullRanges()).map((w) => w.text.trim()).filter((t) => t && !FILLER.test(t));
+  const txt = words.join(' ').replace(/\s+([,.!?])/g, '$1');
+  const s = sentences(txt);
+  return tidy(s, 70) + (s.length > 1 ? '' : '');
+}
+function captionFromScript() {
+  const lines = P.script.replace(/^ON SCREEN[^:]*:\s*/i, '').replace(/Part 2 next\.?|Part 2 tomorrow\.?/gi, '');
+  return tidy(sentences(lines), 70);
+}
+function calNote() { const ce = CAL.entries.find((x) => x.id === P.calId); return ce ? ce.notes : ''; }
+
 // Update the platform captions while typing without losing focus.
 function refreshCaps() {
   const caps = buildCaptions(S, { body: P.caption, closer: P.closer >= 0 ? S.closers[P.closer] : '', title: P.ytTitle || P.title, hook: P.hook, date: P.postDate });
