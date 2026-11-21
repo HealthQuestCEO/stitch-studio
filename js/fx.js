@@ -226,3 +226,25 @@ export class GfxLayer {
     }
   }
 }
+
+// ---------- auto zoom ----------
+// Picks close-ups the way an editor would: the hook, words that carry the message
+// (numbers, money, strong words, *highlighted* words), and every other jump cut.
+const STRONG = /^(never|nobody|no|not|don't|won't|can't|why|stop|secret|truth|think|billion|million|every|only|wrong|backwards|disappear|sick|free)$/i;
+export function autoZoom(words, ranges, total) {
+  const out = [], GAP = 3, HOLD = 1.3;
+  const free = (t) => out.every((e) => t >= e.start + e.dur + GAP || t + HOLD + GAP <= e.start);
+  const add = (start, dur) => { start = Math.max(0, start); dur = Math.min(dur, Math.max(0.4, total - start)); if (dur > 0.3 && free(start)) out.push({ kind: 'punch', start: +start.toFixed(2), dur: +dur.toFixed(2), auto: true }); };
+  // 1. the hook: first line, up to 1.8 s
+  const firstEnd = words.find((w, i) => i > 0 && (/[.!?]$/.test(words[i - 1].text) || w.s - words[i - 1].e > 0.35));
+  add(0, Math.min(1.8, firstEnd ? firstEnd.s : 1.5));
+  // 2. message words
+  for (const w of words) {
+    const t = w.text.replace(/[^\w$%'.]/g, '');
+    if (w.hl || /[\d$%]/.test(t) || STRONG.test(t)) add(w.s - 0.1, HOLD);
+  }
+  // 3. every other jump cut, if nothing nearby
+  let acc = 0, n = 0;
+  for (const r of ranges) { if (acc > 0 && n++ % 2 === 0) add(acc, Math.min(2, r.end - r.start)); acc += r.end - r.start; }
+  return out.sort((a, b) => a.start - b.start);
+}

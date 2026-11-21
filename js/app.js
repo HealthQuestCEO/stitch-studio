@@ -9,7 +9,7 @@ import * as L from './library.js';
 import { ASPECTS, cropRect, loadImages, drawSlide, cropTo, makeZip } from './photo.js';
 import { STATUSES, typeClass, isReel, bracketCount, readXlsx, parseCsv, rowsToEntries, mergeImport, partWarnings } from './calendar.js';
 import { PLATFORMS, RULES, rulesFor, defaultSettings, fmtTime, timesFor, buildCaptions, nextReelDay } from './post.js';
-import { Compositor, MIRRORS, TRANSITIONS, GFX, GfxLayer, newGfx, joinKey } from './fx.js';
+import { Compositor, MIRRORS, TRANSITIONS, GFX, GfxLayer, newGfx, joinKey, autoZoom } from './fx.js';
 import { VisualTrack } from './visuals.js';
 
 const $ = (s) => document.querySelector(s);
@@ -999,10 +999,20 @@ async function runClean() {
   }
   if (gotWords) markRepeats(items);
   P.items = items; P.cleaned = true; P.transcript = gotWords; P.split = null;
+  if (P.autoZoom !== false) applyAutoZoom();
   if (cleanLen() >= 30) P.split = suggestSplit(P.items, P.takes);
   save(); render();
 }
 
+function applyAutoZoom() {
+  if (VO() || PHOTO() || !P.cleaned) return 0;
+  const ranges = keptRanges(P.items, P.takes);
+  const words = P.transcript ? outWords(P.items, P.takes, ranges) : [];
+  P.effects = (P.effects || []).filter((e) => !e.auto);
+  const z = autoZoom(words, ranges, total(ranges)).map((e) => ({ id: newId('e'), ...e }));
+  P.effects.push(...z);
+  return z.length;
+}
 function clean() {
   if (!P.takes.length) { panel.innerHTML = `<h1>Clean it up</h1><p class="sub">Record or upload a take first.</p><button class="big" onclick="">← Back to Record</button>`; panel.querySelector('button').onclick = () => go(2); return; }
   const before = rawLen(), after = cleanLen();
@@ -1020,6 +1030,8 @@ function clean() {
       <label>Cut pauses longer than <b id="pv">${P.pauseSec.toFixed(1)}</b> sec ${tip('Shorter = snappier. Longer = more natural breathing room.')}</label>
       <input type="range" id="pause" min="0.2" max="1.5" step="0.1" value="${P.pauseSec}">
       ${P.cleaned ? '<br><button class="btn" id="again" style="margin-top:12px">Clean again from scratch</button>' : ''}
+      ${!VO() ? `<div class="row" style="margin-top:12px"><label class="inline"><input type="checkbox" id="autoZ" ${P.autoZoom !== false ? 'checked' : ''}> 🔍 Auto zoom: close-ups on your hook, key words and jump cuts</label>
+        ${P.cleaned ? `<span class="sub">${(P.effects || []).filter((e) => e.auto).length} close-ups</span><button class="chip" id="redoZ">Pick again</button>` : ''}</div>` : ''}
     </details>
     <div class="next"><button class="btn" id="back2">← Record more</button>
       <button class="big" id="go4" ${P.cleaned ? '' : 'disabled'}>Next: Edit →</button></div>`;
@@ -1033,6 +1045,8 @@ function clean() {
     if (P.cleaned) P.takes.forEach((tk, i) => markPauses(P.items.filter((it) => it.take === i), P.pauseSec, tk.duration));
     save(); render();
   };
+  if ($('#autoZ')) $('#autoZ').onchange = (e) => { remember(); P.autoZoom = e.target.checked; if (!P.autoZoom) P.effects = (P.effects || []).filter((x) => !x.auto); else applyAutoZoom(); save(); render(); };
+  if ($('#redoZ')) $('#redoZ').onclick = () => { remember(); const n = applyAutoZoom(); save(); render(); toast(`${n} close-ups picked. Change or delete any in Edit → Transitions & mirror.`); };
   if ($('#again')) $('#again').onclick = () => { P.cleaned = false; save(); render(); runClean(); };
   $('#back2').onclick = () => go(2);
   $('#go4').onclick = () => go(4);
