@@ -134,3 +134,7 @@ Nothing left on the build list. Next: whatever comes up from real reels.
 Plan → pick **🖼 Photo or carousel** (or open an ad day on the calendar and tap **Start this post**).
 Record step becomes **Photos**: add pictures from your phone (JPEG/PNG; set iPhone Camera → Formats → Most Compatible if HEIC won't open), reorder ↑↓, type text per slide (`*stars*` = highlight), pick 4:5, 1:1 or 9:16.
 Slide 1 carries your hook. Edit adds stamps, B-roll images and your logo per slide. Export downloads one PNG, or a zip of every slide in order.
+
+## Zoom
+- **Auto zoom (Clean step, on by default):** after cleanup it adds close-ups (punch in toward your face) on your hook, on words that carry the message (numbers, money, strong words like "never" or "nobody", *highlighted* words) and on every other jump cut, at least 3 seconds apart. "Pick again" redoes them; untick to remove them.
+- **Edit → Transitions & mirror:** 🔍 Zoom hook (close-up on the first 1.5 s), Close-up (punch in), Slow zoom in. Every close-up can be moved, stretched or deleted there.

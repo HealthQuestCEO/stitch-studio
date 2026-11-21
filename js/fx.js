@@ -12,11 +12,19 @@ export const MIRRORS = {
   grid3: 'Repeat grid 3×3',
   clones: 'Side-by-side clones (3)',
   kaleido: 'Kaleidoscope (4-way)',
+  punch: 'Close-up (punch in)',
+  push: 'Slow zoom in',
 };
 
-export function applyMirror(ctx, src, kind) {
+export function applyMirror(ctx, src, kind, p = 0) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  if (kind === 'splitLR') {
+  if (kind === 'punch' || kind === 'push') {
+    // zoom toward your face (a little above center)
+    const z = kind === 'punch' ? 1.4 : 1 + 0.3 * Math.min(1, Math.max(0, p));
+    const cx = W / 2, cy = H * 0.4, sw = W / z, sh = H / z;
+    const sx = Math.min(W - sw, Math.max(0, cx - sw / 2)), sy = Math.min(H - sh, Math.max(0, cy - sh / 2));
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+  } else if (kind === 'splitLR') {
     ctx.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H);
     ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H); ctx.restore();
   } else if (kind === 'splitTB') {
@@ -82,7 +90,7 @@ export class Compositor {
     const ft = t + this.offset;
     const eff = this.effects.find((e) => ft >= e.start && ft < e.start + e.dur);
     let cur = this.base;
-    if (eff) { applyMirror(this.fctx, this.base, eff.kind); cur = this.fx; }
+    if (eff) { applyMirror(this.fctx, this.base, eff.kind, (ft - eff.start) / (eff.dur || 1)); cur = this.fx; }
     if (k !== this.k) { // new cut: freeze the last frame we showed
       this.prev.getContext('2d').drawImage(this.last, 0, 0);
       this.k = k;
@@ -217,4 +225,26 @@ export class GfxLayer {
       ctx.restore();
     }
   }
+}
+
+// ---------- auto zoom ----------
+// Picks close-ups the way an editor would: the hook, words that carry the message
+// (numbers, money, strong words, *highlighted* words), and every other jump cut.
+const STRONG = /^(never|nobody|no|not|don't|won't|can't|why|stop|secret|truth|think|billion|million|every|only|wrong|backwards|disappear|sick|free)$/i;
+export function autoZoom(words, ranges, total) {
+  const out = [], GAP = 3, HOLD = 1.3;
+  const free = (t) => out.every((e) => t >= e.start + e.dur + GAP || t + HOLD + GAP <= e.start);
+  const add = (start, dur) => { start = Math.max(0, start); dur = Math.min(dur, Math.max(0.4, total - start)); if (dur > 0.3 && free(start)) out.push({ kind: 'punch', start: +start.toFixed(2), dur: +dur.toFixed(2), auto: true }); };
+  // 1. the hook: first line, up to 1.8 s
+  const firstEnd = words.find((w, i) => i > 0 && (/[.!?]$/.test(words[i - 1].text) || w.s - words[i - 1].e > 0.35));
+  add(0, Math.min(1.8, firstEnd ? firstEnd.s : 1.5));
+  // 2. message words
+  for (const w of words) {
+    const t = w.text.replace(/[^\w$%'.]/g, '');
+    if (w.hl || /[\d$%]/.test(t) || STRONG.test(t)) add(w.s - 0.1, HOLD);
+  }
+  // 3. every other jump cut, if nothing nearby
+  let acc = 0, n = 0;
+  for (const r of ranges) { if (acc > 0 && n++ % 2 === 0) add(acc, Math.min(2, r.end - r.start)); acc += r.end - r.start; }
+  return out.sort((a, b) => a.start - b.start);
 }
