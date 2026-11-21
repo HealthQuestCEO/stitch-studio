@@ -12,11 +12,19 @@ export const MIRRORS = {
   grid3: 'Repeat grid 3×3',
   clones: 'Side-by-side clones (3)',
   kaleido: 'Kaleidoscope (4-way)',
+  punch: 'Close-up (punch in)',
+  push: 'Slow zoom in',
 };
 
-export function applyMirror(ctx, src, kind) {
+export function applyMirror(ctx, src, kind, p = 0) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  if (kind === 'splitLR') {
+  if (kind === 'punch' || kind === 'push') {
+    // zoom toward your face (a little above center)
+    const z = kind === 'punch' ? 1.4 : 1 + 0.3 * Math.min(1, Math.max(0, p));
+    const cx = W / 2, cy = H * 0.4, sw = W / z, sh = H / z;
+    const sx = Math.min(W - sw, Math.max(0, cx - sw / 2)), sy = Math.min(H - sh, Math.max(0, cy - sh / 2));
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+  } else if (kind === 'splitLR') {
     ctx.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H);
     ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H); ctx.restore();
   } else if (kind === 'splitTB') {
@@ -82,7 +90,7 @@ export class Compositor {
     const ft = t + this.offset;
     const eff = this.effects.find((e) => ft >= e.start && ft < e.start + e.dur);
     let cur = this.base;
-    if (eff) { applyMirror(this.fctx, this.base, eff.kind); cur = this.fx; }
+    if (eff) { applyMirror(this.fctx, this.base, eff.kind, (ft - eff.start) / (eff.dur || 1)); cur = this.fx; }
     if (k !== this.k) { // new cut: freeze the last frame we showed
       this.prev.getContext('2d').drawImage(this.last, 0, 0);
       this.k = k;

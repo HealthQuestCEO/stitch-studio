@@ -1653,8 +1653,9 @@ function transHTML(len) {
         <button class="chip" data-see="${at}">▶ See it</button></div>`).join('')}</details>` : '<p class="sub">No cuts yet. Run Clean first.</p>'}`}
   </div>
   <div class="card">
-    <div class="card-h"><b class="big-l">Mirror effects</b></div>
-    <p class="hint">Mirror or repeat your image for a beat (or the whole reel). Text, B-roll and graphics stay on top, not mirrored.</p>
+    <div class="card-h"><b class="big-l">Zoom and mirror effects</b></div>
+    <p class="hint">Zoom in on your face, or mirror and repeat your image, for a beat or the whole reel. Text, B-roll and graphics stay on top.</p>
+    <div class="row"><button class="chip on" id="zoomHook">🔍 Zoom hook: close-up on your first line</button></div>
     <div class="row">${Object.entries(MIRRORS).map(([k, n]) => `<button class="chip" data-addfx="${k}">＋ ${n}</button>`).join('')}</div>
     ${P.effects.map((e, i) => `<div class="card inner">
       <div class="card-h"><select data-k="effects.${i}.kind" data-type="str">${Object.entries(MIRRORS).map(([k, n]) => `<option value="${k}" ${e.kind === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
@@ -1672,6 +1673,10 @@ function transBind() {
   document.querySelectorAll('[data-addfx]').forEach((b) => (b.onclick = () => {
     remember(); P.effects.push({ id: newId('e'), kind: b.dataset.addfx, start: +P.scrub.toFixed(2), dur: 2 }); save(); render();
   }));
+  if ($('#zoomHook')) $('#zoomHook').onclick = () => {
+    remember(); P.effects = P.effects.filter((e) => !(e.kind === 'punch' && e.start === 0));
+    P.effects.push({ id: newId('e'), kind: 'punch', start: 0, dur: 1.5 }); P.scrub = 0.5; save(); render(); toast('Close-up added for the first 1.5 seconds. Drag the times to change it.');
+  };
   document.querySelectorAll('[data-fxall]').forEach((b) => (b.onclick = () => { remember(); Object.assign(P.effects[+b.dataset.fxall], { start: 0, dur: +reelLen().toFixed(2) + 1 }); save(); render(); }));
   document.querySelectorAll('[data-fxdel]').forEach((b) => (b.onclick = () => { remember(); P.effects.splice(+b.dataset.fxdel, 1); save(); render(); }));
 }
