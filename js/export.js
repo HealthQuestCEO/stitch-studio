@@ -96,10 +96,18 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
     if (!started) { rec.start(250); started = true; } else rec.resume();
     await v.play();
     await new Promise((res) => {
+      let fin = false;
+      const finish = () => { if (fin) return; fin = true; clearInterval(guard); v.removeEventListener('ended', finish); v.pause(); res(); };
+      const isEnd = () => v.currentTime >= r.end - 0.01 || v.ended || v.currentTime >= (v.duration || Infinity) - 0.05;
+      // Safety net: the frame callback stops firing when a clip reaches its last frame,
+      // so also check every 100 ms (and on 'ended') or the export can hang at 100%.
+      const guard = setInterval(() => { if (isEnd()) { paint(true); finish(); } }, 100);
+      v.addEventListener('ended', finish);
       const tick = () => {
+        if (fin) return;
         paint(true);
         onProgress(Math.min(1, (done + Math.max(0, v.currentTime - r.start)) / totalLen));
-        if (v.currentTime >= r.end - 0.01 || v.ended) { v.pause(); res(); return; }
+        if (isEnd()) { finish(); return; }
         if (v.requestVideoFrameCallback && !track && v.videoWidth) v.requestVideoFrameCallback(tick); // sound-only clips have no frames
         else requestAnimationFrame(tick);
       };
@@ -112,7 +120,7 @@ export async function renderReel(urls, ranges, onProgress = () => {}, opts = {})
   }
   rec.resume();
   rec.stop();
-  await stopped;
+  await Promise.race([stopped, new Promise((r) => setTimeout(r, 4000))]); // never hang on stop
   stream.getTracks().forEach((t) => t.stop());
   ac.close();
   onProgress(1);
