@@ -1664,6 +1664,7 @@ function transHTML(len) {
     <div class="card-h"><b class="big-l">Transitions between cuts</b><span class="sub">${joins.length} cuts</span></div>
     ${VO() ? `<div class="note">Voice-over reels: transitions go between on-camera cuts, so they're off here. Mirror effects below still work.</div>` : `
     <p class="hint">Every place Clean cut something is a cut. Pick one look for all of them, then change any single cut below. Transitions don't add time: they play over the start of the next bit.</p>
+    <div class="row"><button class="chip" id="noTrans">✕ Remove all transitions (plain cuts)</button></div>
     <label>For every cut</label>
     <div class="row">${Object.entries(TRANSITIONS).map(([k, n]) => `<button class="chip ${tr.def === k ? 'on' : ''}" data-set="trans.def" data-val="${k}">${n}</button>`).join('')}</div>
     <label>Length <b data-show="trans.dur">${tr.dur}</b> sec</label>
@@ -1676,7 +1677,7 @@ function transHTML(len) {
   <div class="card">
     <div class="card-h"><b class="big-l">Zoom and mirror effects</b></div>
     <p class="hint">Zoom in on your face, or mirror and repeat your image, for a beat or the whole reel. Text, B-roll and graphics stay on top.</p>
-    <div class="row"><button class="chip on" id="zoomHook">🔍 Zoom hook: close-up on your first line</button></div>
+    <div class="row"><button class="chip on" id="zoomHook">🔍 Zoom hook: close-up on your first line</button>${P.effects.length ? '<button class="chip" id="noFx">✕ Remove all zooms and effects</button>' : ''}</div>
     <div class="row">${Object.entries(MIRRORS).map(([k, n]) => `<button class="chip" data-addfx="${k}">＋ ${n}</button>`).join('')}</div>
     ${P.effects.map((e, i) => `<div class="card inner">
       <div class="card-h"><select data-k="effects.${i}.kind" data-type="str">${Object.entries(MIRRORS).map(([k, n]) => `<option value="${k}" ${e.kind === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
@@ -1686,6 +1687,8 @@ function transHTML(len) {
 }
 function transBind() {
   bindScrub(); bindInputs(); bindTimed();
+  if ($('#noTrans')) $('#noTrans').onclick = () => { remember(); P.trans.def = 'cut'; P.trans.joins = {}; save(); render(); toast('All transitions removed. Every cut is a plain cut now.'); };
+  if ($('#noFx')) $('#noFx').onclick = () => { remember(); P.effects = []; P.autoZoom = false; save(); render(); toast('All zooms and effects removed. Auto zoom is off for this reel.'); };
   document.querySelectorAll('[data-join]').forEach((sel) => (sel.onchange = () => {
     remember(); P.trans.joins = P.trans.joins || {};
     if (sel.value) P.trans.joins[sel.dataset.join] = sel.value; else delete P.trans.joins[sel.dataset.join];
