@@ -115,7 +115,7 @@ export function chunks(outWords, n) {
   let cur = [];
   outWords.forEach((w, i) => {
     const prev = outWords[i - 1];
-    const brk = cur.length >= n || (prev && (/[.?!,]$/.test(prev.text) || w.s - prev.e > 0.45));
+    const brk = w.brk || (!w.join && (cur.length >= n || (prev && (/[.?!,]$/.test(prev.text) || w.pause || w.s - prev.e > 0.45))));
     if (cur.length && brk) { out.push(cur); cur = []; }
     cur.push(w);
   });
