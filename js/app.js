@@ -743,7 +743,7 @@ async function makeOverlay(part) {
   if (!T.hook.text) T.hook.text = P.hook;
   if (PHOTO()) T.hook.dur = 1; // the hook sits on slide 1
   const ranges = partRanges(part);
-  T.caps.chunks = !PHOTO() && P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges).filter((w) => w.text !== '-'), T.caps.n) : null;
+  T.caps.chunks = !PHOTO() && P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges).filter((w) => w.text !== '-' && !w.hide), T.caps.n) : null;
   await Promise.all([ready(T.hook.style), ready(T.caps.style), ready(T.list.style), ready(T.typed.style)]);
   const behind = { hook: T.hook.on && T.hook.behind, caps: T.caps.on && T.caps.behind, list: T.list.on && T.list.behind };
   const anyBehind = !VO() && (behind.hook || behind.caps || behind.list);
@@ -1178,9 +1178,9 @@ function edit() {
         <label class="inline"><input type="checkbox" data-k="text.caps.skipUnderHook" data-type="bool" ${T.caps.skipUnderHook ? 'checked' : ''}> Hide while the hook shows</label>
       </div>
       <div class="row small" style="margin-top:12px">Tap a word to:
-        ${[['fix', 'Fix the word'], ['brk', 'Start a new caption here'], ['join', 'Keep with the word before'], ['hl', 'Highlight'], ['big', 'Make bigger']].map(([k, n]) => `<button class="chip ${tapMode === k ? 'on' : ''}" data-tap="${k}">${n}</button>`).join('')}</div>
-      <p class="hint">Each box is one caption, shown in this order. Fix the word: type the right word (or two words, e.g. "Health Quest" → "HealthQuest"). Type a single dash ( - ) to hide a word from the captions.</p>
-      <div class="words caps-groups">${chunks(words, T.caps.n).map((c) => `<span class="capbox">${c.words.map((w) => `<span class="wd ${w.hl ? 'hl' : ''} ${w.big ? 'bg' : ''} ${w.text === '-' ? 'gone' : ''} ${w.brk ? 'brk' : ''} ${w.join ? 'join' : ''}" data-w="${w.i}" data-s="${w.s.toFixed(2)}">${esc(w.text)}</span>`).join(' ')}</span>`).join('')}</div>
+        ${[['hide', 'Delete from captions'], ['fix', 'Fix the word'], ['brk', 'Start a new caption here'], ['join', 'Keep with the word before'], ['hl', 'Highlight'], ['big', 'Make bigger']].map(([k, n]) => `<button class="chip ${tapMode === k ? 'on' : ''}" data-tap="${k}">${n}</button>`).join('')}</div>
+      <p class="hint">Each box is one caption, shown in this order. Fix the word: type the right word (or two words, e.g. "Health Quest" → "HealthQuest"). Delete from captions: tap a word to take it out of the captions (it stays in the video; tap again to bring it back).</p>
+      <div class="words caps-groups">${chunks(words, T.caps.n).map((c) => `<span class="capbox">${c.words.map((w) => `<span class="wd ${w.hl ? 'hl' : ''} ${w.big ? 'bg' : ''} ${w.text === '-' || w.hide ? 'gone' : ''} ${w.brk ? 'brk' : ''} ${w.join ? 'join' : ''}" data-w="${w.i}" data-s="${w.s.toFixed(2)}">${esc(w.text)}</span>`).join(' ')}</span>`).join('')}</div>
       ${words.some((w) => w.brk || w.join) ? '<button class="chip" id="resetSplits">Undo my caption splits</button>' : ''}
       ${styleEditor('text.caps.style')}`}
     </div>
@@ -2092,7 +2092,7 @@ function tidy(arr, max) {
   return out.join(' ');
 }
 function captionFromSpeech() {
-  const words = outWords(P.items, P.takes, fullRanges()).map((w) => w.text.trim()).filter((t) => t && t !== '-' && !FILLER.test(t));
+  const words = outWords(P.items, P.takes, fullRanges()).filter((w) => !w.hide).map((w) => w.text.trim()).filter((t) => t && t !== '-' && !FILLER.test(t));
   const txt = words.join(' ').replace(/\s+([,.!?])/g, '$1');
   const s = sentences(txt);
   return tidy(s, 70) + (s.length > 1 ? '' : '');
