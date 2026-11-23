@@ -1000,7 +1000,7 @@ async function runClean() {
   if (gotWords) markRepeats(items);
   P.items = items; P.cleaned = true; P.transcript = gotWords; P.split = null;
   if (P.autoZoom !== false) applyAutoZoom();
-  if (cleanLen() >= 30) P.split = suggestSplit(P.items, P.takes);
+  // over 30 sec: suggest a split (see splitNote), don't force it
   save(); render();
 }
 
@@ -1068,7 +1068,7 @@ function splitNote(after, parts) {
       ${ok ? '' : ' One part is still 30 sec or more. Cut a little more, or tap a crossed-out line back only if you need it.'}
       <br><button class="btn" id="noSplit" style="margin-top:8px">Remove the split</button></div>`;
   }
-  if (after >= 30) return `<div class="note bad">This is ${fmt(after)} sec, and reels need to be under 30. Split it into Part 1 and Part 2 at the end of a sentence?
+  if (after >= 30) return `<div class="note">⚠ This is ${fmt(after)} sec. Under 30 usually keeps more viewers, but you can still export it as is. Or split it into Part 1 and Part 2 at the end of a sentence:
     <br><button class="big gold" id="doSplit" style="margin-top:10px">Split into Part 1 and Part 2</button></div>`;
   return `<div class="note ok">Under 30 sec. You're good.</div>`;
 }
@@ -1901,9 +1901,9 @@ function exportStep() {
     ${parts.map((p, k) => {
       const over = lens[k] >= 30;
       const label = p ? `Part ${p}` : 'Your reel';
-      return `<div class="note ${over ? 'bad' : 'ok'}"><b>${label}: ${fmt(lens[k])} sec</b>
-        ${over ? `<br>Reels need to be under 30 sec. <button class="btn" data-back="1">Go back and split it</button>`
-               : `<br><button class="big" data-exp="${p}" ${P.takes.length ? '' : 'disabled'}>⬇ Export ${label} (MP4)</button>`}</div>`;
+      return `<div class="note ${over ? '' : 'ok'}"><b>${label}: ${fmt(lens[k])} sec</b>
+        ${over ? `<br>⚠ Over 30 sec. Short reels usually keep more viewers, but it's your call. <button class="btn" data-back="1">Go back and split it</button>` : ''}
+        <br><button class="big" data-exp="${p}" ${P.takes.length ? '' : 'disabled'}>⬇ Export ${label} (MP4)${over ? ' anyway' : ''}</button></div>`;
     }).join('')}
     <div class="progress"><div id="bar"></div></div><div id="status" class="sub"></div>
     <h3>Cover image ${tip('Pick the frame people see before they tap play.')}</h3>
@@ -1919,7 +1919,6 @@ function exportStep() {
 
 async function doExport(part) {
   const ranges = partRanges(part);
-  if (total(ranges) >= 30) { toast('Over 30 sec. Split it first.'); return; }
   stopCamera();
   document.querySelectorAll('[data-exp]').forEach((b) => (b.disabled = true));
   setStatus('Exporting… this plays through once, so it takes about as long as the reel.', 0);
