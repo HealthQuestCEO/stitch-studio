@@ -207,7 +207,7 @@ export function outWords(items, takes, ranges) {
     if (k < 0) return;
     const r = ranges[k];
     out.push({
-      i, text: it.fix || it.text, hl: !!it.hl, big: !!it.big, brk: !!it.brk, join: !!it.join, pause,
+      i, text: it.fix || it.text, hl: !!it.hl, big: !!it.big, brk: !!it.brk, join: !!it.join, hide: !!it.hide, pause,
       s: starts[k] + Math.max(0, it.start - r.start),
       e: starts[k] + Math.min(r.end, it.end) - r.start,
     });
