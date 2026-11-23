@@ -743,7 +743,7 @@ async function makeOverlay(part) {
   if (!T.hook.text) T.hook.text = P.hook;
   if (PHOTO()) T.hook.dur = 1; // the hook sits on slide 1
   const ranges = partRanges(part);
-  T.caps.chunks = !PHOTO() && P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges), T.caps.n) : null;
+  T.caps.chunks = !PHOTO() && P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges).filter((w) => w.text !== '-'), T.caps.n) : null;
   await Promise.all([ready(T.hook.style), ready(T.caps.style), ready(T.list.style), ready(T.typed.style)]);
   const behind = { hook: T.hook.on && T.hook.behind, caps: T.caps.on && T.caps.behind, list: T.list.on && T.list.behind };
   const anyBehind = !VO() && (behind.hook || behind.caps || behind.list);
@@ -1178,8 +1178,10 @@ function edit() {
         <label class="inline"><input type="checkbox" data-k="text.caps.skipUnderHook" data-type="bool" ${T.caps.skipUnderHook ? 'checked' : ''}> Hide while the hook shows</label>
       </div>
       <div class="row small" style="margin-top:12px">Tap a word to:
-        ${[['hl', 'Highlight'], ['big', 'Make bigger'], ['fix', 'Fix spelling']].map(([k, n]) => `<button class="chip ${tapMode === k ? 'on' : ''}" data-tap="${k}">${n}</button>`).join('')}</div>
-      <div class="words">${words.map((w) => `<span class="wd ${w.hl ? 'hl' : ''} ${w.big ? 'bg' : ''}" data-w="${w.i}" data-s="${w.s.toFixed(2)}">${esc(w.text)}</span>`).join(' ')}</div>
+        ${[['fix', 'Fix the word'], ['brk', 'Start a new caption here'], ['join', 'Keep with the word before'], ['hl', 'Highlight'], ['big', 'Make bigger']].map(([k, n]) => `<button class="chip ${tapMode === k ? 'on' : ''}" data-tap="${k}">${n}</button>`).join('')}</div>
+      <p class="hint">Each box is one caption, shown in this order. Fix the word: type the right word (or two words, e.g. "Health Quest" → "HealthQuest"). Type a single dash ( - ) to hide a word from the captions.</p>
+      <div class="words caps-groups">${chunks(words, T.caps.n).map((c) => `<span class="capbox">${c.words.map((w) => `<span class="wd ${w.hl ? 'hl' : ''} ${w.big ? 'bg' : ''} ${w.text === '-' ? 'gone' : ''} ${w.brk ? 'brk' : ''} ${w.join ? 'join' : ''}" data-w="${w.i}" data-s="${w.s.toFixed(2)}">${esc(w.text)}</span>`).join(' ')}</span>`).join('')}</div>
+      ${words.some((w) => w.brk || w.join) ? '<button class="chip" id="resetSplits">Undo my caption splits</button>' : ''}
       ${styleEditor('text.caps.style')}`}
     </div>
 
@@ -1229,13 +1231,18 @@ function edit() {
     presets.push({ name, style: { ...getPath(b.dataset.savepreset) } });
     await store.put('presets', presets); toast(`Saved "${name}". It's in "Apply a preset" on every text.`); render();
   }));
+  if ($('#resetSplits')) $('#resetSplits').onclick = () => { remember(); P.items.forEach((it) => { delete it.brk; delete it.join; }); save(); render(); };
   document.querySelectorAll('[data-w]').forEach((el) => (el.onclick = () => {
     const it = P.items[+el.dataset.w];
     P.scrub = +el.dataset.s + 0.05;
     if (tapMode === 'fix') {
       const v = prompt('Fix this word:', it.fix || it.text); if (v == null) return;
       remember(); it.fix = v.trim() || undefined;
-    } else { remember(); it[tapMode] = !it[tapMode]; }
+    } else {
+      remember(); it[tapMode] = !it[tapMode];
+      if (tapMode === 'brk' && it.brk) it.join = false;
+      if (tapMode === 'join' && it.join) it.brk = false;
+    }
     save(); render();
   }));
 }
@@ -1657,6 +1664,7 @@ function transHTML(len) {
     <div class="card-h"><b class="big-l">Transitions between cuts</b><span class="sub">${joins.length} cuts</span></div>
     ${VO() ? `<div class="note">Voice-over reels: transitions go between on-camera cuts, so they're off here. Mirror effects below still work.</div>` : `
     <p class="hint">Every place Clean cut something is a cut. Pick one look for all of them, then change any single cut below. Transitions don't add time: they play over the start of the next bit.</p>
+    <div class="row"><button class="chip" id="noTrans">✕ Remove all transitions (plain cuts)</button></div>
     <label>For every cut</label>
     <div class="row">${Object.entries(TRANSITIONS).map(([k, n]) => `<button class="chip ${tr.def === k ? 'on' : ''}" data-set="trans.def" data-val="${k}">${n}</button>`).join('')}</div>
     <label>Length <b data-show="trans.dur">${tr.dur}</b> sec</label>
@@ -1669,7 +1677,7 @@ function transHTML(len) {
   <div class="card">
     <div class="card-h"><b class="big-l">Zoom and mirror effects</b></div>
     <p class="hint">Zoom in on your face, or mirror and repeat your image, for a beat or the whole reel. Text, B-roll and graphics stay on top.</p>
-    <div class="row"><button class="chip on" id="zoomHook">🔍 Zoom hook: close-up on your first line</button></div>
+    <div class="row"><button class="chip on" id="zoomHook">🔍 Zoom hook: close-up on your first line</button>${P.effects.length ? '<button class="chip" id="noFx">✕ Remove all zooms and effects</button>' : ''}</div>
     <div class="row">${Object.entries(MIRRORS).map(([k, n]) => `<button class="chip" data-addfx="${k}">＋ ${n}</button>`).join('')}</div>
     ${P.effects.map((e, i) => `<div class="card inner">
       <div class="card-h"><select data-k="effects.${i}.kind" data-type="str">${Object.entries(MIRRORS).map(([k, n]) => `<option value="${k}" ${e.kind === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
@@ -1679,6 +1687,8 @@ function transHTML(len) {
 }
 function transBind() {
   bindScrub(); bindInputs(); bindTimed();
+  if ($('#noTrans')) $('#noTrans').onclick = () => { remember(); P.trans.def = 'cut'; P.trans.joins = {}; save(); render(); toast('All transitions removed. Every cut is a plain cut now.'); };
+  if ($('#noFx')) $('#noFx').onclick = () => { remember(); P.effects = []; P.autoZoom = false; save(); render(); toast('All zooms and effects removed. Auto zoom is off for this reel.'); };
   document.querySelectorAll('[data-join]').forEach((sel) => (sel.onchange = () => {
     remember(); P.trans.joins = P.trans.joins || {};
     if (sel.value) P.trans.joins[sel.dataset.join] = sel.value; else delete P.trans.joins[sel.dataset.join];
@@ -2083,7 +2093,7 @@ function tidy(arr, max) {
   return out.join(' ');
 }
 function captionFromSpeech() {
-  const words = outWords(P.items, P.takes, fullRanges()).map((w) => w.text.trim()).filter((t) => t && !FILLER.test(t));
+  const words = outWords(P.items, P.takes, fullRanges()).map((w) => w.text.trim()).filter((t) => t && t !== '-' && !FILLER.test(t));
   const txt = words.join(' ').replace(/\s+([,.!?])/g, '$1');
   const s = sentences(txt);
   return tidy(s, 70) + (s.length > 1 ? '' : '');

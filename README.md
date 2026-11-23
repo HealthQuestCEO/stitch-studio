@@ -138,3 +138,10 @@ Slide 1 carries your hook. Edit adds stamps, B-roll images and your logo per sli
 ## Zoom
 - **Auto zoom (Clean step, on by default):** after cleanup it adds close-ups (punch in toward your face) on your hook, on words that carry the message (numbers, money, strong words like "never" or "nobody", *highlighted* words) and on every other jump cut, at least 3 seconds apart. "Pick again" redoes them; untick to remove them.
 - **Edit → Transitions & mirror:** 🔍 Zoom hook (close-up on the first 1.5 s), Close-up (punch in), Slow zoom in. Every close-up can be moved, stretched or deleted there.
+
+## Editing captions (Edit → Text → Captions)
+Each box is one caption. Pick what a tap does, then tap a word:
+- **Fix the word** (type the right word; a single `-` hides it from captions)
+- **Start a new caption here** / **Keep with the word before** (overrides "Words at a time")
+- **Highlight** / **Make bigger**
+"Undo my caption splits" clears your splits. Captions also break where you paused, even after Clean cut the pause.

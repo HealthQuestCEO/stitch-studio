@@ -198,17 +198,20 @@ export function outWords(items, takes, ranges) {
   const out = [];
   let acc = 0;
   const starts = ranges.map((r) => { const a = acc; acc += r.end - r.start; return a; });
+  let prev = null; // last kept word, in its own take's time
   items.forEach((it, i) => {
     if (it.type !== 'word' || it.cut) return;
+    const pause = !!prev && (prev.take !== it.take || it.start - prev.end > 0.45);
     const mid = (it.start + it.end) / 2;
     const k = ranges.findIndex((r) => r.take === it.take && mid >= r.start && mid <= r.end);
     if (k < 0) return;
     const r = ranges[k];
     out.push({
-      i, text: it.fix || it.text, hl: !!it.hl, big: !!it.big,
+      i, text: it.fix || it.text, hl: !!it.hl, big: !!it.big, brk: !!it.brk, join: !!it.join, pause,
       s: starts[k] + Math.max(0, it.start - r.start),
       e: starts[k] + Math.min(r.end, it.end) - r.start,
     });
+    prev = it;
   });
   return out;
 }
