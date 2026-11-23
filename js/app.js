@@ -2,6 +2,7 @@ import * as store from './store.js';
 import { decodeClip, to16kMono, speechRuns, captureAudio } from './audio.js';
 import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit, outWords } from './clean.js';
 import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
+import { renderSmooth, canSmooth } from './export2.js';
 import { drawText, drawWords, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
@@ -1921,14 +1922,30 @@ async function doExport(part) {
   const ranges = partRanges(part);
   stopCamera();
   document.querySelectorAll('[data-exp]').forEach((b) => (b.disabled = true));
-  setStatus('Exporting… this plays through once, so it takes about as long as the reel.', 0);
+  setStatus('Exporting… frame by frame, so it may take a little longer than the reel itself.', 0);
   try {
     const opts = { overlay: await makeOverlay(part), comp: makeComp(part, ranges), vols: P.takes.map((t) => t.vol ?? 1) };
     if (VO() && P.visuals.length) {
       opts.track = makeTrack();
       opts.offset = part === 2 ? total(partRanges(1)) : 0;
     }
-    const { blob, ext } = await renderReel(P.takes.map((t) => urls[t.id]), ranges, (p) => setStatus(`Exporting… ${Math.round(p * 100)}%`, p), opts);
+    const prog = (p) => setStatus(`Exporting… ${Math.round(p * 100)}%`, p);
+    let out = null;
+    const brollSound = opts.overlay.audioEls && opts.overlay.audioEls().length;
+    if (canSmooth() && !brollSound && !window.__REALTIME_EXPORT) {
+      try {
+        const audioBlobs = await Promise.all(P.takes.map((t) => store.get('blob:' + (t.audioId || t.id))));
+        out = await renderSmooth(P.takes.map((t) => urls[t.id]), audioBlobs, ranges, prog, opts);
+        window.__exportPath = 'smooth';
+      } catch (e) { console.warn('Smooth export failed, using real-time export', e); out = null; }
+    }
+    if (!out) {
+      opts.overlay = await makeOverlay(part); opts.comp = makeComp(part, ranges);
+      if (VO() && P.visuals.length) opts.track = makeTrack();
+      out = await renderReel(P.takes.map((t) => urls[t.id]), ranges, prog, opts);
+      window.__exportPath = 'realtime';
+    }
+    const { blob, ext } = out;
     const name = `${(P.title || 'reel').replace(/[^\w\- ]+/g, '').trim() || 'reel'}${part ? ' - Part ' + part : ''}.${ext}`;
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
     window.__lastExport = { size: blob.size, type: blob.type, name };

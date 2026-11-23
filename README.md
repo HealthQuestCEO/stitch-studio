@@ -145,3 +145,6 @@ Each box is one caption. Pick what a tap does, then tap a word:
 - **Start a new caption here** / **Keep with the word before** (overrides "Words at a time")
 - **Highlight** / **Make bigger**
 "Undo my caption splits" clears your splits. Captions also break where you paused, even after Clean cut the pause.
+
+## Export (smooth)
+Export draws every frame one at a time and encodes it with WebCodecs (`js/export2.js`, muxers vendored in `js/vendor/`), so a busy computer can't drop frames. It takes a bit longer than the reel's length. If the browser can't do this, or a B-roll clip has its sound turned up, it falls back to the old real-time recorder.
