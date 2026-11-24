@@ -1193,6 +1193,7 @@ function edit() {
       <div class="row">
         <label class="inline">First line at <input type="number" class="num" min="0" step="0.5" value="${T.list.start}" data-k="text.list.start" data-type="num"> sec</label>
         <label class="inline">Next line every <input type="number" class="num" min="0.5" step="0.5" value="${T.list.every}" data-k="text.list.every" data-type="num"> sec</label>
+        <label class="inline">Show <select data-k="text.list.mode" data-type="str"><option value="one" ${(T.list.mode || 'one') === 'one' ? 'selected' : ''}>one line at a time (each replaces the last)</option><option value="stack" ${T.list.mode === 'stack' ? 'selected' : ''}>build a list (lines stack up)</option></select></label>
         ${VO() ? '' : `<label class="inline"><input type="checkbox" data-k="text.list.behind" data-type="bool" ${T.list.behind ? 'checked' : ''}> Behind me</label>`}
       </div>
       ${styleEditor('text.list.style')}` : ''}

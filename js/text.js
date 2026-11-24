@@ -178,13 +178,29 @@ export function drawText(ctx, T, t, layers = { hook: true, caps: true, list: tru
   if (layers.list && T.list.on && T.list.lines.trim()) {
     const lines = T.list.lines.split('\n').map((l) => l.trim()).filter(Boolean);
     const shown = lines.filter((_, i) => t >= T.list.start + i * T.list.every);
-    const st = T.list.style;
-    const gap = st.size * 1.25;
-    shown.forEach((ln, i) => {
-      const since = t - (T.list.start + i * T.list.every);
-      const words = ln.split(/\s+/).map((w) => ({ text: w.replace(/^\*|\*$/g, ''), hl: /^\*.*\*$/.test(w) }));
-      drawWords(ctx, st, words, W * T.list.x, H * T.list.y + i * gap, animFor('pop', since));
-    });
+    const toWords = (ln) => ln.split(/\s+/).map((w) => ({ text: w.replace(/^\*|\*$/g, ''), hl: /^\*.*\*$/.test(w) }));
+    const items = shown.map((ln, i) => ({ i, words: toWords(ln) }));
+    if ((T.list.mode || 'one') === 'one') {
+      // only the newest line shows; it replaces the one before
+      const it = items[items.length - 1];
+      if (it) drawWords(ctx, T.list.style, it.words, W * T.list.x, H * T.list.y, animFor('pop', t - (T.list.start + it.i * T.list.every)));
+    } else {
+      // stack them, each below the last (long lines wrap), shrinking to fit if needed
+      const heightOf = (st, words) => { const { lines } = layout(ctx, st, words, W * 0.84); return lines.reduce((a, l) => a + Math.max(...l.map((w) => w.px)) * 1.15, 0); };
+      const all = lines.map((ln) => toWords(ln)); // size for the full list so text doesn't jump as lines appear
+      let st = T.list.style;
+      const gapOf = (s) => s.size * 0.35;
+      const totalOf = (s) => all.reduce((a, w) => a + heightOf(s, w), 0) + gapOf(s) * (all.length - 1);
+      const room = H * 0.9 - H * T.list.y;
+      const tot = totalOf(st);
+      if (tot > room) st = { ...st, size: Math.max(st.size * 0.5, st.size * (room / tot)) };
+      let y = H * T.list.y;
+      items.forEach((it) => {
+        const h = heightOf(st, it.words);
+        drawWords(ctx, st, it.words, W * T.list.x, y + h / 2, animFor('pop', t - (T.list.start + it.i * T.list.every)));
+        y += h + gapOf(st);
+      });
+    }
   }
 }
 
