@@ -208,7 +208,10 @@ export function drawText(ctx, T, t, layers = { hook: true, caps: true, list: tru
   if (layers.list && T.list.on && T.list.lines.trim()) {
     const lines = T.list.lines.split('\n').map((l) => l.trim()).filter(Boolean);
     const at = (i) => (T.list.times && T.list.times[i] != null ? T.list.times[i] : T.list.start + i * T.list.every);
-    const shown = lines.filter((_, i) => t >= at(i));
+    // when the whole list goes away
+    const lastAt = lines.length ? at(lines.length - 1) : 0;
+    const endAt = T.list.hide === 'after' ? lastAt + (T.list.hideAfter ?? 3) : T.list.hide === 'at' ? (T.list.hideAt ?? lastAt + 3) : Infinity;
+    const shown = t >= endAt ? [] : lines.filter((_, i) => t >= at(i));
     const toWords = (ln) => ln.split(/\s+/).map((w) => ({ text: w.replace(/^\*|\*$/g, ''), hl: /^\*.*\*$/.test(w) }));
     const items = shown.map((ln, i) => ({ i, words: toWords(ln) }));
     if ((T.list.mode || 'one') === 'one') {
