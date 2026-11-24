@@ -136,6 +136,36 @@ function animFor(kind, since) {
 }
 
 // Everything text-related drawn at reel time t. layers = {hook, caps, list}
+// When each list line is said out loud: match the line's first words to the transcript.
+export function syncListTimes(lines, words) {
+  const EXP = { "you're": 'you are', "i'm": 'i am', "it's": 'it is', "don't": 'do not', "can't": 'can not', "won't": 'will not', "we're": 'we are', "they're": 'they are', "that's": 'that is', "you've": 'you have', "i've": 'i have', "isn't": 'is not', "didn't": 'did not', "i'd": 'i would', "you'd": 'you would', "you'll": 'you will', "i'll": 'i will' };
+  const toks = (txt) => txt.toLowerCase().replace(/[’]/g, "'").split(/[\s-]+/).flatMap((x) => { x = x.replace(/[^a-z0-9']/g, ''); return (EXP[x] || x.replace(/'/g, '')).split(' '); }).filter(Boolean);
+  const T = []; // [token, word index]
+  words.forEach((w, i) => toks(w.text).forEach((t) => T.push([t, i])));
+  const NUM = { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' };
+  let cur = 0;
+  return lines.map((ln) => {
+    const m = ln.match(/^\s*(\d+)[.)]?\s*/);
+    const want = toks(ln.replace(/^\s*\d+[.)]?\s*/, '')).slice(0, 4);
+    if (!want.length) return null;
+    const need = Math.min(3, want.length);
+    for (let j = cur; j < T.length; j++) {
+      if (T[j][0] !== want[0]) continue;
+      let hit = 0;
+      for (let k = 0; k < want.length && j + k < T.length; k++) if (T[j + k][0] === want[k]) hit++;
+      if (hit >= need) {
+        const wi = T[j][1];
+        let s = words[wi].s;
+        const prev = j > 0 ? T[j - 1][0] : '';
+        if (m && (prev === m[1] || prev === NUM[m[1]])) s = words[T[j - 1][1]].s; // start on the number if you said it
+        cur = j + 1;
+        return Math.max(0, s - 0.1);
+      }
+    }
+    return null;
+  });
+}
+
 export function drawText(ctx, T, t, layers = { hook: true, caps: true, list: true }, part = 0) {
   if (!T) return;
   // Hook (part 1 / whole reel) or "PART 2" label
@@ -177,14 +207,34 @@ export function drawText(ctx, T, t, layers = { hook: true, caps: true, list: tru
   // List lines, one at a time
   if (layers.list && T.list.on && T.list.lines.trim()) {
     const lines = T.list.lines.split('\n').map((l) => l.trim()).filter(Boolean);
-    const shown = lines.filter((_, i) => t >= T.list.start + i * T.list.every);
-    const st = T.list.style;
-    const gap = st.size * 1.25;
-    shown.forEach((ln, i) => {
-      const since = t - (T.list.start + i * T.list.every);
-      const words = ln.split(/\s+/).map((w) => ({ text: w.replace(/^\*|\*$/g, ''), hl: /^\*.*\*$/.test(w) }));
-      drawWords(ctx, st, words, W * T.list.x, H * T.list.y + i * gap, animFor('pop', since));
-    });
+    const at = (i) => (T.list.times && T.list.times[i] != null ? T.list.times[i] : T.list.start + i * T.list.every);
+    // when the whole list goes away
+    const lastAt = lines.length ? at(lines.length - 1) : 0;
+    const endAt = T.list.hide === 'after' ? lastAt + (T.list.hideAfter ?? 3) : T.list.hide === 'at' ? (T.list.hideAt ?? lastAt + 3) : Infinity;
+    const shown = t >= endAt ? [] : lines.filter((_, i) => t >= at(i));
+    const toWords = (ln) => ln.split(/\s+/).map((w) => ({ text: w.replace(/^\*|\*$/g, ''), hl: /^\*.*\*$/.test(w) }));
+    const items = shown.map((ln, i) => ({ i, words: toWords(ln) }));
+    if ((T.list.mode || 'one') === 'one') {
+      // only the newest line shows; it replaces the one before
+      const it = items[items.length - 1];
+      if (it) drawWords(ctx, T.list.style, it.words, W * T.list.x, H * T.list.y, animFor('pop', t - at(it.i)));
+    } else {
+      // stack them, each below the last (long lines wrap), shrinking to fit if needed
+      const heightOf = (st, words) => { const { lines } = layout(ctx, st, words, W * 0.84); return lines.reduce((a, l) => a + Math.max(...l.map((w) => w.px)) * 1.15, 0); };
+      const all = lines.map((ln) => toWords(ln)); // size for the full list so text doesn't jump as lines appear
+      let st = T.list.style;
+      const gapOf = (s) => s.size * 0.35;
+      const totalOf = (s) => all.reduce((a, w) => a + heightOf(s, w), 0) + gapOf(s) * (all.length - 1);
+      const room = H * 0.9 - H * T.list.y;
+      const tot = totalOf(st);
+      if (tot > room) st = { ...st, size: Math.max(st.size * 0.5, st.size * (room / tot)) };
+      let y = H * T.list.y;
+      items.forEach((it) => {
+        const h = heightOf(st, it.words);
+        drawWords(ctx, st, it.words, W * T.list.x, y + h / 2, animFor('pop', t - at(it.i)));
+        y += h + gapOf(st);
+      });
+    }
   }
 }
 

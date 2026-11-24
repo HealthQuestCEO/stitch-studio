@@ -3,7 +3,7 @@ import { decodeClip, to16kMono, speechRuns, captureAudio } from './audio.js';
 import { buildItems, markPauses, markRepeats, keptRanges, total, suggestSplit, outWords } from './clean.js';
 import { renderReel, frameAt, pickMime, drawCover, W, H } from './export.js';
 import { renderSmooth, canSmooth } from './export2.js';
-import { drawText, drawWords, chunks, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
+import { drawText, drawWords, chunks, syncListTimes, ready, defaultText, FONTS, BRAND, MY_STYLE, loadFont, loadAllFonts } from './text.js';
 import { loadSegmenter, drawPerson, segmenterFailed } from './segment.js';
 import { BrollLayer, FRAMES, newBroll } from './broll.js';
 import * as L from './library.js';
@@ -745,6 +745,12 @@ async function makeOverlay(part) {
   if (PHOTO()) T.hook.dur = 1; // the hook sits on slide 1
   const ranges = partRanges(part);
   T.caps.chunks = !PHOTO() && P.cleaned && P.transcript ? chunks(outWords(P.items, P.takes, ranges).filter((w) => w.text !== '-' && !w.hide), T.caps.n) : null;
+  if (T.list.on && T.list.sync !== false && !PHOTO() && P.cleaned && P.transcript) {
+    const lines = T.list.lines.split('\n').map((l) => l.trim()).filter(Boolean);
+    const tm = syncListTimes(lines, outWords(P.items, P.takes, ranges).filter((w) => !w.hide));
+    for (let i = 0; i < tm.length; i++) if (tm[i] == null) tm[i] = i ? tm[i - 1] + T.list.every : T.list.start; // couldn't find it: show it after the one before
+    T.list.times = tm;
+  }
   await Promise.all([ready(T.hook.style), ready(T.caps.style), ready(T.list.style), ready(T.typed.style)]);
   const behind = { hook: T.hook.on && T.hook.behind, caps: T.caps.on && T.caps.behind, list: T.list.on && T.list.behind };
   const anyBehind = !VO() && (behind.hook || behind.caps || behind.list);
@@ -1191,8 +1197,13 @@ function edit() {
       ${T.list.on ? `
       <textarea data-k="text.list.lines" data-type="str" data-live placeholder="One line per row, e.g.&#10;$116 more per kid, every year&#10;$19,000 more per kid, lifetime">${esc(T.list.lines)}</textarea>
       <div class="row">
-        <label class="inline">First line at <input type="number" class="num" min="0" step="0.5" value="${T.list.start}" data-k="text.list.start" data-type="num"> sec</label>
-        <label class="inline">Next line every <input type="number" class="num" min="0.5" step="0.5" value="${T.list.every}" data-k="text.list.every" data-type="num"> sec</label>
+        ${P.transcript && !PHOTO() ? `<label class="inline"><input type="checkbox" data-k="text.list.sync" data-type="bool" data-re ${T.list.sync !== false ? 'checked' : ''}> 🎙 Show each line when I say it</label>` : ''}
+        ${T.list.sync === false || !P.transcript || PHOTO() ? `<label class="inline">First line at <input type="number" class="num" min="0" step="0.5" value="${T.list.start}" data-k="text.list.start" data-type="num"> sec</label>
+        <label class="inline">Next line every <input type="number" class="num" min="0.5" step="0.5" value="${T.list.every}" data-k="text.list.every" data-type="num"> sec</label>` : '<span class="sub">If it can\'t find a line in what you said, that line shows a couple of seconds after the one before.</span>'}
+        <label class="inline">List goes away <select data-k="text.list.hide" data-type="str" data-re><option value="end" ${(T.list.hide || 'end') === 'end' ? 'selected' : ''}>at the end of the reel</option><option value="after" ${T.list.hide === 'after' ? 'selected' : ''}>a few seconds after the last line</option><option value="at" ${T.list.hide === 'at' ? 'selected' : ''}>at a set time</option></select></label>
+        ${T.list.hide === 'after' ? `<label class="inline"><input type="number" class="num" min="0" step="0.5" value="${T.list.hideAfter ?? 3}" data-k="text.list.hideAfter" data-type="num"> sec after the last line</label>` : ''}
+        ${T.list.hide === 'at' ? `<label class="inline">at <input type="number" class="num" min="0" step="0.5" value="${T.list.hideAt ?? 10}" data-k="text.list.hideAt" data-type="num"> sec</label>` : ''}
+        <label class="inline">Show <select data-k="text.list.mode" data-type="str"><option value="one" ${(T.list.mode || 'one') === 'one' ? 'selected' : ''}>one line at a time (each replaces the last)</option><option value="stack" ${T.list.mode === 'stack' ? 'selected' : ''}>build a list (lines stack up)</option></select></label>
         ${VO() ? '' : `<label class="inline"><input type="checkbox" data-k="text.list.behind" data-type="bool" ${T.list.behind ? 'checked' : ''}> Behind me</label>`}
       </div>
       ${styleEditor('text.list.style')}` : ''}
